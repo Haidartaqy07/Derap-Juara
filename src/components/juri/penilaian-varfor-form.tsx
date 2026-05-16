@@ -7,16 +7,26 @@ import { IndikatorVarfor } from '@/types';
 import { INDIKATOR_VARFOR, LABEL_NILAI } from '@/lib/indikator-varfor';
 import { CheckCircle2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ConfirmDialog from '@/components/confirm-dialog';
 
 type Props = {
   penilaianId: string;
+  eventId: string;
   isLocked: boolean;
   isSubmitted: boolean;
   onSubmitted: () => void;
 };
 
+// Tahap dialog: null = tidak ada dialog tampil
+type DialogStep =
+  | null
+  | { type: 'belum-lengkap'; jumlah: number }
+  | { type: 'konfirmasi' }
+  | { type: 'berhasil' };
+
 export default function PenilaianVarforForm({
   penilaianId,
+  eventId,
   isLocked,
   isSubmitted,
   onSubmitted,
@@ -26,6 +36,7 @@ export default function PenilaianVarforForm({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [savingKode, setSavingKode] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogStep>(null);
 
   useEffect(() => {
     load();
@@ -64,48 +75,56 @@ export default function PenilaianVarforForm({
     setSavingKode(null);
   }
 
-  async function handleSubmit() {
+  // Dipanggil saat juri klik tombol "Submit Nilai"
+  function handleClickSubmit() {
     if (isLocked) return;
 
-    // Cek indikator yang belum dinilai
     const belumDinilai = INDIKATOR_VARFOR.filter((i) => nilai[i.kode] === undefined);
     if (belumDinilai.length > 0) {
-      if (
-        !confirm(
-          `Ada ${belumDinilai.length} indikator yang belum dinilai. Submit sekarang akan menganggap nilai 0. Lanjutkan?`
-        )
-      ) {
-        return;
-      }
-      const supabase = createClient();
-      const upserts = belumDinilai.map((i) => ({
-        penilaian_id: penilaianId,
-        kode_indikator: i.kode,
-        nilai: 0,
-      }));
-      await supabase.from('nilai_detail_varfor').upsert(upserts);
+      setDialog({ type: 'belum-lengkap', jumlah: belumDinilai.length });
+    } else {
+      setDialog({ type: 'konfirmasi' });
     }
+  }
 
-    if (!confirm('Submit nilai? Setelah submit, nilai akan TERKUNCI dan tidak bisa diedit kecuali admin membuka kunci.')) {
-      return;
-    }
-
+  // Eksekusi submit final ke database
+  async function executeSubmit() {
     setSubmitting(true);
     const supabase = createClient();
+
+    // Isi nilai 0 untuk indikator yang belum dinilai
+    const belumDinilai = INDIKATOR_VARFOR.filter((i) => nilai[i.kode] === undefined);
+    if (belumDinilai.length > 0) {
+      await supabase.from('nilai_detail_varfor').upsert(
+        belumDinilai.map((i) => ({
+          penilaian_id: penilaianId,
+          kode_indikator: i.kode,
+          nilai: 0,
+        }))
+      );
+    }
+
     const { error } = await supabase
       .from('penilaian_varfor')
       .update({ is_submitted: true, is_locked: true, submitted_at: new Date().toISOString() })
       .eq('id', penilaianId);
 
+    setSubmitting(false);
+
     if (error) {
+      setDialog(null);
       alert('Gagal submit: ' + error.message);
-      setSubmitting(false);
       return;
     }
 
     onSubmitted();
-    setSubmitting(false);
-    alert('Nilai berhasil disubmit!');
+    setDialog({ type: 'berhasil' });
+  }
+
+  // Setelah juri klik OK di dialog sukses → kembali ke daftar peserta
+  function handleSelesai() {
+    setDialog(null);
+    router.push(`/juri/events/${eventId}`);
     router.refresh();
   }
 
@@ -119,7 +138,6 @@ export default function PenilaianVarforForm({
     return result;
   }, []);
 
-  // Hitung total
   const totalVarfor = INDIKATOR_VARFOR.filter((i) => i.kategori !== 'danton').reduce(
     (sum, i) => sum + (nilai[i.kode] ?? 0),
     0
@@ -196,7 +214,7 @@ export default function PenilaianVarforForm({
               </div>
             ) : (
               <button
-                onClick={handleSubmit}
+                onClick={handleClickSubmit}
                 disabled={submitting || isLocked}
                 className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50"
               >
@@ -207,14 +225,48 @@ export default function PenilaianVarforForm({
           </div>
         </div>
       </div>
+
+      {/* Dialog: ada indikator belum dinilai */}
+      <ConfirmDialog
+        open={dialog?.type === 'belum-lengkap'}
+        variant="warning"
+        title="Masih Ada Indikator Kosong"
+        message={
+          dialog?.type === 'belum-lengkap'
+            ? `Ada ${dialog.jumlah} indikator yang belum dinilai. Jika dilanjutkan, indikator tersebut akan dianggap bernilai 0.`
+            : ''
+        }
+        confirmLabel="Lanjut Submit"
+        cancelLabel="Periksa Lagi"
+        onConfirm={() => setDialog({ type: 'konfirmasi' })}
+        onCancel={() => setDialog(null)}
+      />
+
+      {/* Dialog: konfirmasi submit final */}
+      <ConfirmDialog
+        open={dialog?.type === 'konfirmasi'}
+        variant="confirm"
+        title="Submit Penilaian?"
+        message="Setelah disubmit, nilai akan TERKUNCI dan tidak bisa diedit lagi. Hubungi admin jika perlu revisi."
+        confirmLabel="Ya, Submit"
+        cancelLabel="Batal"
+        loading={submitting}
+        onConfirm={executeSubmit}
+        onCancel={() => setDialog(null)}
+      />
+
+      {/* Dialog: berhasil submit */}
+      <ConfirmDialog
+        open={dialog?.type === 'berhasil'}
+        variant="success"
+        title="Nilai Berhasil Disubmit"
+        message="Penilaian untuk peserta ini sudah tersimpan dan terkunci. Anda akan kembali ke daftar peserta."
+        onConfirm={handleSelesai}
+      />
     </div>
   );
 }
 
-// ============================================================================
-// Helper class names untuk setiap warna indikator
-// Outdoor-friendly: kontras tinggi, default berwarna jelas, terpilih solid,
-// yang tidak dipilih jadi abu-abu pudar setelah ada selection di baris itu
 // ============================================================================
 const COLOR_STYLES: Record<
   string,
@@ -276,7 +328,6 @@ function IndikatorVarforRow({
     }
   });
 
-  // Untuk D1-D3 yang cuma 3 level, tampilkan pakai grid lebih besar
   const useCompactGrid = uniqueOpsi.length === opsi.length;
   const hasSelection = currentNilai !== undefined;
 

@@ -14,7 +14,9 @@ export default function JuriPenilaianPage({
 }: {
   params: Promise<{ id: string; pesertaId: string }>;
 }) {
+  // Next.js 15: params adalah Promise → harus di-unwrap dengan React.use()
   const { id: eventId, pesertaId } = use(params);
+
   const router = useRouter();
   const [peserta, setPeserta] = useState<Peserta | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
@@ -205,6 +207,7 @@ export default function JuriPenilaianPage({
       {role === 'juri3' && (
         <PenilaianVarforForm
           penilaianId={penilaianId}
+          eventId={eventId}
           isLocked={isLocked}
           isSubmitted={isSubmitted}
           onSubmitted={() => {

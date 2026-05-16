@@ -7,6 +7,7 @@ import { IndikatorPbb } from '@/types';
 import { LABEL_NILAI } from '@/lib/indikator-varfor';
 import { CheckCircle2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import ConfirmDialog from '@/components/confirm-dialog';
 
 type Props = {
   penilaianId: string;
@@ -15,6 +16,13 @@ type Props = {
   isSubmitted: boolean;
   onSubmitted: () => void;
 };
+
+// Tahap dialog: null = tidak ada dialog tampil
+type DialogStep =
+  | null
+  | { type: 'belum-lengkap'; jumlah: number } // peringatan ada indikator belum dinilai
+  | { type: 'konfirmasi' }                    // konfirmasi final submit
+  | { type: 'berhasil' };                     // notifikasi sukses
 
 export default function PenilaianPbbForm({
   penilaianId,
@@ -29,6 +37,7 @@ export default function PenilaianPbbForm({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<DialogStep>(null);
 
   useEffect(() => {
     load();
@@ -37,7 +46,6 @@ export default function PenilaianPbbForm({
   async function load() {
     const supabase = createClient();
 
-    // Load semua indikator PBB untuk event ini
     const { data: ind } = await supabase
       .from('indikator_pbb')
       .select('*')
@@ -47,7 +55,6 @@ export default function PenilaianPbbForm({
 
     setIndikator(ind || []);
 
-    // Load nilai yang sudah ada
     const { data: detail } = await supabase
       .from('nilai_detail_pbb')
       .select('*')
@@ -61,11 +68,9 @@ export default function PenilaianPbbForm({
     setLoading(false);
   }
 
-  // Auto-save tiap kali user pilih nilai
   async function handleSelectNilai(indikatorId: string, nilaiBaru: number) {
     if (isLocked) return;
 
-    // Optimistic update
     setNilai((prev) => ({ ...prev, [indikatorId]: nilaiBaru }));
     setSavingId(indikatorId);
 
@@ -76,59 +81,64 @@ export default function PenilaianPbbForm({
 
     if (error) {
       alert('Gagal simpan: ' + error.message);
-      // Rollback
       await load();
     }
     setSavingId(null);
   }
 
-  async function handleSubmit() {
+  // Dipanggil saat juri klik tombol "Submit Nilai"
+  function handleClickSubmit() {
     if (isLocked) return;
 
-    // Validasi: minimal semua indikator sudah dinilai? (boleh 0 untuk "Kosong")
     const belumDinilai = indikator.filter((i) => nilai[i.id] === undefined);
     if (belumDinilai.length > 0) {
-      if (
-        !confirm(
-          `Ada ${belumDinilai.length} indikator yang belum dinilai. Submit sekarang akan menganggap nilai 0. Lanjutkan?`
-        )
-      ) {
-        return;
-      }
-      // Set semua yang belum dinilai jadi 0
-      const supabase = createClient();
-      const upserts = belumDinilai.map((i) => ({
-        penilaian_id: penilaianId,
-        indikator_id: i.id,
-        nilai: 0,
-      }));
-      await supabase.from('nilai_detail_pbb').upsert(upserts);
+      setDialog({ type: 'belum-lengkap', jumlah: belumDinilai.length });
+    } else {
+      setDialog({ type: 'konfirmasi' });
     }
+  }
 
-    if (!confirm('Submit nilai? Setelah submit, nilai akan TERKUNCI dan tidak bisa diedit kecuali admin membuka kunci.')) {
-      return;
-    }
-
+  // Eksekusi submit final ke database
+  async function executeSubmit() {
     setSubmitting(true);
     const supabase = createClient();
+
+    // Isi nilai 0 untuk indikator yang belum dinilai
+    const belumDinilai = indikator.filter((i) => nilai[i.id] === undefined);
+    if (belumDinilai.length > 0) {
+      await supabase.from('nilai_detail_pbb').upsert(
+        belumDinilai.map((i) => ({
+          penilaian_id: penilaianId,
+          indikator_id: i.id,
+          nilai: 0,
+        }))
+      );
+    }
+
     const { error } = await supabase
       .from('penilaian_pbb')
       .update({ is_submitted: true, is_locked: true, submitted_at: new Date().toISOString() })
       .eq('id', penilaianId);
 
+    setSubmitting(false);
+
     if (error) {
+      setDialog(null);
       alert('Gagal submit: ' + error.message);
-      setSubmitting(false);
       return;
     }
 
     onSubmitted();
-    setSubmitting(false);
-    alert('Nilai berhasil disubmit!');
+    setDialog({ type: 'berhasil' });
+  }
+
+  // Setelah juri klik OK di dialog sukses → kembali ke daftar peserta
+  function handleSelesai() {
+    setDialog(null);
+    router.push(`/juri/events/${eventId}`);
     router.refresh();
   }
 
-  // Pisahkan PBB & Danton
   const indikatorPbb = useMemo(
     () => indikator.filter((i) => i.kategori === 'pbb'),
     [indikator]
@@ -138,7 +148,6 @@ export default function PenilaianPbbForm({
     [indikator]
   );
 
-  // Total
   const totalPbb = indikatorPbb.reduce((sum, i) => sum + (nilai[i.id] ?? 0), 0);
   const totalDanton = indikatorDanton.reduce((sum, i) => sum + (nilai[i.id] ?? 0), 0);
   const totalKeseluruhan = totalPbb + totalDanton;
@@ -214,7 +223,7 @@ export default function PenilaianPbbForm({
               </div>
             ) : (
               <button
-                onClick={handleSubmit}
+                onClick={handleClickSubmit}
                 disabled={submitting || isLocked}
                 className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-50"
               >
@@ -225,14 +234,48 @@ export default function PenilaianPbbForm({
           </div>
         </div>
       </div>
+
+      {/* Dialog: ada indikator belum dinilai */}
+      <ConfirmDialog
+        open={dialog?.type === 'belum-lengkap'}
+        variant="warning"
+        title="Masih Ada Indikator Kosong"
+        message={
+          dialog?.type === 'belum-lengkap'
+            ? `Ada ${dialog.jumlah} indikator yang belum dinilai. Jika dilanjutkan, indikator tersebut akan dianggap bernilai 0.`
+            : ''
+        }
+        confirmLabel="Lanjut Submit"
+        cancelLabel="Periksa Lagi"
+        onConfirm={() => setDialog({ type: 'konfirmasi' })}
+        onCancel={() => setDialog(null)}
+      />
+
+      {/* Dialog: konfirmasi submit final */}
+      <ConfirmDialog
+        open={dialog?.type === 'konfirmasi'}
+        variant="confirm"
+        title="Submit Penilaian?"
+        message="Setelah disubmit, nilai akan TERKUNCI dan tidak bisa diedit lagi. Hubungi admin jika perlu revisi."
+        confirmLabel="Ya, Submit"
+        cancelLabel="Batal"
+        loading={submitting}
+        onConfirm={executeSubmit}
+        onCancel={() => setDialog(null)}
+      />
+
+      {/* Dialog: berhasil submit */}
+      <ConfirmDialog
+        open={dialog?.type === 'berhasil'}
+        variant="success"
+        title="Nilai Berhasil Disubmit"
+        message="Penilaian untuk peserta ini sudah tersimpan dan terkunci. Anda akan kembali ke daftar peserta."
+        onConfirm={handleSelesai}
+      />
     </div>
   );
 }
 
-// ============================================================================
-// Helper class names untuk setiap warna indikator
-// Outdoor-friendly: kontras tinggi, default berwarna jelas, terpilih solid,
-// yang tidak dipilih jadi abu-abu pudar setelah ada selection di baris itu
 // ============================================================================
 const COLOR_STYLES: Record<
   string,
@@ -316,11 +359,6 @@ function IndikatorRow({
           const isSelected = hasSelection && currentNilai === o.nilai;
           const styles = COLOR_STYLES[o.color] ?? COLOR_STYLES.gray;
 
-          // Tentukan state visual:
-          // - locked: opacity-50 (sebelum cek selected)
-          // - selected: pakai .selected (solid + ring tebal)
-          // - hasSelection tapi bukan ini: pakai .dim (abu pudar)
-          // - belum ada selection: pakai .idle (warna asli indikator)
           const stateClass = isSelected
             ? styles.selected
             : hasSelection
