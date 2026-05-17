@@ -7,12 +7,14 @@ import { Peserta, UserRole } from '@/types';
 import { ArrowLeft, ArrowRight, CheckCircle2, Lock, Circle } from 'lucide-react';
 
 type PesertaWithStatus = Peserta & {
+  has_data: boolean;
   is_submitted: boolean;
   is_locked: boolean;
 };
 
 export default function JuriEventDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+  const paramsValue = params instanceof Promise ? use(params) : params;
+  const { id } = paramsValue;
   const [peserta, setPeserta] = useState<PesertaWithStatus[]>([]);
   const [eventName, setEventName] = useState('');
   const [role, setRole] = useState<UserRole | null>(null);
@@ -59,25 +61,34 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
     const pesertaIds = pst.map((p) => p.id);
 
     // Status submit per peserta untuk juri ini
-    let statuses: Map<string, { submitted: boolean; locked: boolean }> = new Map();
+    // Catatan: record penilaian diidentifikasi pakai tipe_juri, bukan juri_id
+    let statuses: Map<string, { hasData: boolean; submitted: boolean; locked: boolean }> =
+      new Map();
 
     if (userRole === 'juri1' || userRole === 'juri2') {
       const { data: pen } = await supabase
         .from('penilaian_pbb')
         .select('peserta_id, is_submitted, is_locked')
         .in('peserta_id', pesertaIds)
-        .eq('juri_id', user.id);
+        .eq('tipe_juri', userRole);
       pen?.forEach((p) =>
-        statuses.set(p.peserta_id, { submitted: p.is_submitted, locked: p.is_locked })
+        statuses.set(p.peserta_id, {
+          hasData: true,
+          submitted: p.is_submitted,
+          locked: p.is_locked,
+        }),
       );
     } else if (userRole === 'juri3') {
       const { data: pen } = await supabase
         .from('penilaian_varfor')
         .select('peserta_id, is_submitted, is_locked')
-        .in('peserta_id', pesertaIds)
-        .eq('juri_id', user.id);
+        .in('peserta_id', pesertaIds);
       pen?.forEach((p) =>
-        statuses.set(p.peserta_id, { submitted: p.is_submitted, locked: p.is_locked })
+        statuses.set(p.peserta_id, {
+          hasData: true,
+          submitted: p.is_submitted,
+          locked: p.is_locked,
+        }),
       );
     }
 
@@ -85,6 +96,7 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
       const s = statuses.get(p.id);
       return {
         ...p,
+        has_data: s?.hasData ?? false,
         is_submitted: s?.submitted ?? false,
         is_locked: s?.locked ?? false,
       };
@@ -128,7 +140,11 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
                 </span>
                 <div>
                   <p className="font-semibold text-slate-900">{p.nama_regu}</p>
-                  <StatusBadge submitted={p.is_submitted} locked={p.is_locked} />
+                  <StatusBadge
+                    hasData={p.has_data}
+                    submitted={p.is_submitted}
+                    locked={p.is_locked}
+                  />
                 </div>
               </div>
               <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600" />
@@ -140,7 +156,15 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
   );
 }
 
-function StatusBadge({ submitted, locked }: { submitted: boolean; locked: boolean }) {
+function StatusBadge({
+  hasData,
+  submitted,
+  locked,
+}: {
+  hasData: boolean;
+  submitted: boolean;
+  locked: boolean;
+}) {
   if (locked) {
     return (
       <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
@@ -154,6 +178,14 @@ function StatusBadge({ submitted, locked }: { submitted: boolean; locked: boolea
       <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
         <CheckCircle2 className="h-3 w-3" />
         Submitted
+      </span>
+    );
+  }
+  if (hasData) {
+    return (
+      <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+        <Circle className="h-3 w-3 fill-blue-400" />
+        Sedang dinilai
       </span>
     );
   }
