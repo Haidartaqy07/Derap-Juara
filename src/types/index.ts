@@ -24,7 +24,7 @@ export interface Peserta {
   id: string;
   event_id: string;
   nama_regu: string;
-  nomor_urut: number;
+  nomor_urut: number | null;
   waktu_tampil_detik: number | null;
 }
 
