@@ -157,3 +157,6 @@ paskibra-app/
 
 **Realtime tidak update**
 → Di Supabase, buka **Database** → **Replication** → enable untuk tabel yang dipakai
+
+
+tes 123
