@@ -119,8 +119,7 @@ export async function exportWithTemplateClone(
     }
 
     // Tambah sheet Rekap Akhir
-    const rekapData = [['Nomor Urut', 'Nama Regu', 'Juri 1 (PBB)', 'Juri 2 (PBB)', 'Juri 3 (VarFor)']];
-    scoresData.forEach((score) => {
+      const rekapData: (string | number)[][] = [['Nomor Urut', 'Nama Regu', 'Juri 1 (PBB)', 'Juri 2 (PBB)', 'Juri 3 (VarFor)']];    scoresData.forEach((score) => {
       rekapData.push([
         score.nomor_urut,
         score.nama_regu,
