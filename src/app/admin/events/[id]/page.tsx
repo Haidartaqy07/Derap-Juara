@@ -115,7 +115,9 @@ export default function EventDetailPage({
         {tab === 'peringkat' && (
           <PeringkatTab eventId={id} batasWaktuDetik={event.batas_waktu_detik} />
         )}
-        {tab === 'peserta' && <PesertaTab eventId={id} />}
+        {tab === 'peserta' && (
+          <PesertaTab eventId={id} batasWaktuDetik={event.batas_waktu_detik} />
+        )}
         {tab === 'juri' && <JuriTab eventId={id} />}
         {tab === 'gerakan' && <GerakanPbbTab eventId={id} />}
         {tab === 'voting' && <VotingTab eventId={id} />}

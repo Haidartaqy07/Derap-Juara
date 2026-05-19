@@ -3,11 +3,17 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Peserta } from '@/types';
-import { Plus, Trash2, Clock, ListOrdered, Check, X } from 'lucide-react';
+import { Plus, Trash2, Clock, ListOrdered, Check, X, AlertTriangle } from 'lucide-react';
 import { formatWaktu } from '@/lib/scoring';
 import ConfirmDialog from '@/components/confirm-dialog';
 
-export default function PesertaTab({ eventId }: { eventId: string }) {
+export default function PesertaTab({
+  eventId,
+  batasWaktuDetik,
+}: {
+  eventId: string;
+  batasWaktuDetik: number;
+}) {
   const [peserta, setPeserta] = useState<Peserta[]>([]);
   const [loading, setLoading] = useState(true);
   const [namaRegu, setNamaRegu] = useState('');
@@ -89,6 +95,11 @@ export default function PesertaTab({ eventId }: { eventId: string }) {
     );
   }
 
+  // Hitung jumlah peserta yang kena penalti waktu
+  const jumlahMelanggar = peserta.filter(
+    (p) => p.waktu_tampil_detik != null && p.waktu_tampil_detik > batasWaktuDetik
+  ).length;
+
   // ─── Mode tampilan normal ───
   return (
     <div className="space-y-4">
@@ -122,7 +133,16 @@ export default function PesertaTab({ eventId }: { eventId: string }) {
       </form>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-600">Total {peserta.length} peserta</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-slate-600">Total {peserta.length} peserta</p>
+          {/* Banner ringkasan penalti */}
+          {jumlahMelanggar > 0 && (
+            <span className="flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+              <AlertTriangle className="h-3 w-3" />
+              {jumlahMelanggar} tim melewati batas waktu
+            </span>
+          )}
+        </div>
         <button
           onClick={() => setModeSetNomor(true)}
           disabled={peserta.length === 0}
@@ -131,6 +151,17 @@ export default function PesertaTab({ eventId }: { eventId: string }) {
           <ListOrdered className="h-4 w-4" />
           Set Nomor Urut
         </button>
+      </div>
+
+      {/* Info batas waktu event */}
+      <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <Clock className="h-3.5 w-3.5 text-slate-400" />
+        Batas waktu tampil:{' '}
+        <span className="font-semibold text-slate-800">
+          {Math.floor(batasWaktuDetik / 60)} menit
+          {batasWaktuDetik % 60 > 0 ? ` ${batasWaktuDetik % 60} detik` : ''}
+        </span>
+        <span className="text-slate-400">— Kelebihan dikenakan pengurangan 2 poin/detik</span>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
@@ -142,13 +173,16 @@ export default function PesertaTab({ eventId }: { eventId: string }) {
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
                 Waktu Tampil
               </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
+                Penalti Waktu
+              </th>
               <th className="px-4 py-2 text-right text-xs font-semibold text-slate-600">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {peserta.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
                   Belum ada peserta
                 </td>
               </tr>
@@ -157,6 +191,7 @@ export default function PesertaTab({ eventId }: { eventId: string }) {
                 <PesertaRow
                   key={p.id}
                   peserta={p}
+                  batasWaktuDetik={batasWaktuDetik}
                   onDelete={() => setHapusTarget(p)}
                   onUpdateWaktu={handleUpdateWaktu}
                 />
@@ -224,7 +259,7 @@ function SetNomorUrutPanel({
 
     // Cek ada angka tidak valid (<= 0)
     if (angka.some((n) => isNaN(n) || n < 1)) {
-      setError('Nomor urut harus berupa angka minimal 1.');
+      setError('Nomor urut harus berupa angka positif.');
       return;
     }
 
@@ -337,14 +372,16 @@ function SetNomorUrutPanel({
 }
 
 // ============================================================================
-// Baris peserta di tabel utama — fokus pada set/edit waktu tampil
+// Baris peserta di tabel utama — fokus pada set/edit waktu tampil + penalti
 // ============================================================================
 function PesertaRow({
   peserta,
+  batasWaktuDetik,
   onDelete,
   onUpdateWaktu,
 }: {
   peserta: Peserta;
+  batasWaktuDetik: number;
   onDelete: () => void;
   onUpdateWaktu: (id: string, detik: number | null) => void;
 }) {
@@ -358,6 +395,14 @@ function PesertaRow({
 
   const sudahAdaWaktu = peserta.waktu_tampil_detik != null;
 
+  // Hitung penalti
+  const kelebihanDetik =
+    peserta.waktu_tampil_detik != null
+      ? Math.max(0, peserta.waktu_tampil_detik - batasWaktuDetik)
+      : 0;
+  const penguranganPoin = kelebihanDetik * 2;
+  const kenaPenalti = kelebihanDetik > 0;
+
   function mulaiEdit() {
     setMenit(peserta.waktu_tampil_detik ? Math.floor(peserta.waktu_tampil_detik / 60) : 0);
     setDetik(peserta.waktu_tampil_detik ? peserta.waktu_tampil_detik % 60 : 0);
@@ -370,7 +415,7 @@ function PesertaRow({
   }
 
   return (
-    <tr className="hover:bg-slate-50">
+    <tr className={`hover:bg-slate-50 ${kenaPenalti ? 'bg-red-50/40' : ''}`}>
       <td className="px-4 py-3">
         {peserta.nomor_urut != null ? (
           <span className="font-mono text-sm font-semibold text-slate-900">
@@ -383,6 +428,8 @@ function PesertaRow({
         )}
       </td>
       <td className="px-4 py-3 text-sm text-slate-900">{peserta.nama_regu}</td>
+
+      {/* Kolom Waktu Tampil */}
       <td className="px-4 py-3">
         {editWaktu ? (
           <div className="flex items-center gap-1">
@@ -419,8 +466,12 @@ function PesertaRow({
           </div>
         ) : sudahAdaWaktu ? (
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 font-mono text-sm font-semibold text-slate-900">
-              <Clock className="h-3.5 w-3.5 text-slate-400" />
+            <span
+              className={`flex items-center gap-1 font-mono text-sm font-semibold ${
+                kenaPenalti ? 'text-red-700' : 'text-slate-900'
+              }`}
+            >
+              <Clock className={`h-3.5 w-3.5 ${kenaPenalti ? 'text-red-400' : 'text-slate-400'}`} />
               {formatWaktu(peserta.waktu_tampil_detik)}
             </span>
             <button
@@ -440,6 +491,28 @@ function PesertaRow({
           </button>
         )}
       </td>
+
+      {/* Kolom Penalti Waktu */}
+      <td className="px-4 py-3">
+        {!sudahAdaWaktu ? (
+          <span className="text-xs text-slate-400">—</span>
+        ) : kenaPenalti ? (
+          <div className="flex flex-col gap-0.5">
+            <span className="flex items-center gap-1 font-semibold text-red-600">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              -{penguranganPoin} poin
+            </span>
+            <span className="text-xs text-red-400">
+              Lebih {kelebihanDetik} detik × 2 poin/detik
+            </span>
+          </div>
+        ) : (
+          <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+            Tepat waktu
+          </span>
+        )}
+      </td>
+
       <td className="px-4 py-3 text-right">
         <button
           onClick={onDelete}

@@ -159,4 +159,4 @@ paskibra-app/
 → Di Supabase, buka **Database** → **Replication** → enable untuk tabel yang dipakai
 
 
-tes 123
+tes 1234

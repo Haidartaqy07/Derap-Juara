@@ -7,18 +7,25 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
+const ALLOWED_ROLES = ['admin', 'juri_1', 'juri_2', 'juri_3'] as const;
+type Role = (typeof ALLOWED_ROLES)[number];
+
 export async function PUT(req: Request) {
   try {
-    const { userId, username, email, password } = await req.json();
+    const { userId, username, email, password, role } = await req.json();
 
     if (!userId || !username?.trim()) {
       return NextResponse.json({ error: 'userId dan username wajib diisi' }, { status: 400 });
     }
 
-    // Update email dan/atau password di Supabase Auth jika disertakan
+    if (role && !ALLOWED_ROLES.includes(role as Role)) {
+      return NextResponse.json({ error: 'Role tidak valid' }, { status: 400 });
+    }
+
+    // ── 1. Update email dan/atau password di Supabase Auth ──
     const authUpdates: { email?: string; password?: string } = {};
-    if (email && email.trim()) authUpdates.email = email.trim();
-    if (password && password.trim().length >= 6) authUpdates.password = password.trim();
+    if (email?.trim()) authUpdates.email = email.trim();
+    if (password?.trim().length >= 6) authUpdates.password = password.trim();
 
     if (Object.keys(authUpdates).length > 0) {
       const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
@@ -30,10 +37,15 @@ export async function PUT(req: Request) {
       }
     }
 
-    // Update username di tabel profiles
+    // ── 2. Update profiles (username + role opsional) ──
+    const profileUpdates: { username: string; role?: string } = {
+      username: username.trim(),
+    };
+    if (role) profileUpdates.role = role;
+
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({ username: username.trim() })
+      .update(profileUpdates)
       .eq('id', userId);
 
     if (profileError) {

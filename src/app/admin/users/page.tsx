@@ -1,12 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Profile } from '@/types';
 import { Pencil, Trash2, X, Check, KeyRound } from 'lucide-react';
 
+type ProfileWithEmail = Profile & { email: string };
+
+type Role = 'admin' | 'juri_1' | 'juri_2' | 'juri_3';
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: 'bg-purple-100 text-purple-700',
+  juri_1: 'bg-blue-100 text-blue-700',
+  juri_2: 'bg-teal-100 text-teal-700',
+  juri_3: 'bg-orange-100 text-orange-700',
+};
+
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<Profile[]>([]);
+  const [users, setUsers] = useState<ProfileWithEmail[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit state
@@ -14,6 +24,7 @@ export default function AdminUsersPage() {
   const [editUsername, setEditUsername] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState<Role>('juri_1');
   const [saving, setSaving] = useState(false);
 
   // Delete state
@@ -24,20 +35,19 @@ export default function AdminUsersPage() {
   }, []);
 
   async function load() {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-    setUsers(data || []);
+    setLoading(true);
+    const res = await fetch('/api/admin/get-users');
+    const result = await res.json();
+    setUsers(result.users || []);
     setLoading(false);
   }
 
-  function startEdit(u: Profile) {
+  function startEdit(u: ProfileWithEmail) {
     setEditingId(u.id);
     setEditUsername(u.username);
     setEditEmail('');
     setEditPassword('');
+    setEditRole((u.role as Role) ?? 'juri_1');
   }
 
   function cancelEdit() {
@@ -45,11 +55,16 @@ export default function AdminUsersPage() {
     setEditUsername('');
     setEditEmail('');
     setEditPassword('');
+    setEditRole('juri_1');
   }
 
-  async function handleSaveEdit(u: Profile) {
+  async function handleSaveEdit(u: ProfileWithEmail) {
     setSaving(true);
-    const body: Record<string, string> = { userId: u.id, username: editUsername.trim() };
+    const body: Record<string, string> = {
+      userId: u.id,
+      username: editUsername.trim(),
+      role: editRole,
+    };
     if (editEmail.trim()) body.email = editEmail.trim();
     if (editPassword.trim().length >= 6) body.password = editPassword.trim();
 
@@ -69,7 +84,7 @@ export default function AdminUsersPage() {
     setSaving(false);
   }
 
-  async function handleDelete(u: Profile) {
+  async function handleDelete(u: ProfileWithEmail) {
     if (
       !confirm(
         `Hapus user "${u.username}"?\n\nAksi ini tidak bisa dibatalkan dan akan menghapus akun beserta seluruh data terkait dari sistem.`,
@@ -106,9 +121,8 @@ export default function AdminUsersPage() {
         <table className="w-full">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
-                Username
-              </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">Username</th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">Email</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">Role</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">Dibuat</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">Aksi</th>
@@ -117,7 +131,7 @@ export default function AdminUsersPage() {
           <tbody className="divide-y divide-slate-200">
             {users.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
                   Belum ada user
                 </td>
               </tr>
@@ -126,8 +140,9 @@ export default function AdminUsersPage() {
                 editingId === u.id ? (
                   /* ── Edit Row ── */
                   <tr key={u.id} className="bg-blue-50">
-                    <td className="px-4 py-2" colSpan={2}>
-                      <div className="flex flex-wrap gap-2">
+                    <td className="px-4 py-3" colSpan={3}>
+                      <div className="flex flex-wrap gap-3">
+                        {/* Username */}
                         <div>
                           <label className="mb-0.5 block text-xs font-medium text-slate-600">
                             Username
@@ -139,19 +154,42 @@ export default function AdminUsersPage() {
                             placeholder="Username"
                           />
                         </div>
+
+                        {/* Role */}
+                        <div>
+                          <label className="mb-0.5 block text-xs font-medium text-slate-600">
+                            Role
+                          </label>
+                          <select
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value as Role)}
+                            className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                          >
+                            <option value="juri_1">Juri 1</option>
+                            <option value="juri_2">Juri 2</option>
+                            <option value="juri_3">Juri 3</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
+
+                        {/* Email */}
                         <div>
                           <label className="mb-0.5 block text-xs font-medium text-slate-600">
                             Email baru
-                            <span className="ml-1 font-normal text-slate-400">(opsional)</span>
+                            <span className="ml-1 font-normal text-slate-400">
+                              (saat ini: {u.email || '—'})
+                            </span>
                           </label>
                           <input
                             type="email"
                             value={editEmail}
                             onChange={(e) => setEditEmail(e.target.value)}
                             className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                            placeholder="email@contoh.com"
+                            placeholder="Kosongkan jika tidak diubah"
                           />
                         </div>
+
+                        {/* Password */}
                         <div>
                           <label className="mb-0.5 flex items-center gap-1 text-xs font-medium text-slate-600">
                             <KeyRound className="h-3 w-3" />
@@ -169,10 +207,10 @@ export default function AdminUsersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-sm text-slate-600">
+                    <td className="px-4 py-3 text-sm text-slate-600">
                       {new Date(u.created_at).toLocaleDateString('id-ID')}
                     </td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => handleSaveEdit(u)}
@@ -195,15 +233,12 @@ export default function AdminUsersPage() {
                 ) : (
                   /* ── Normal Row ── */
                   <tr key={u.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm font-medium text-slate-900">
-                      {u.username}
-                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900">{u.username}</td>
+                    <td className="px-4 py-3 text-sm text-slate-500">{u.email || '—'}</td>
                     <td className="px-4 py-3">
                       <span
                         className={`rounded px-2 py-0.5 text-xs font-medium ${
-                          u.role === 'admin'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-blue-100 text-blue-700'
+                          ROLE_COLORS[u.role] ?? 'bg-slate-100 text-slate-600'
                         }`}
                       >
                         {u.role}
