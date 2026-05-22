@@ -6,6 +6,7 @@ import { Lock, Unlock, CheckCircle2, Circle, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import JSZip from 'jszip';
 
 type StatusRow = {
   peserta_id: string;
@@ -331,35 +332,22 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
     XLSX.writeFile(workbook, filename);
   }
 
-  async function exportToPDF() {
-    if (scoresData.length === 0) {
-      alert('Tidak ada data untuk diexport');
-      return;
-    }
-
-    const supabase = createClient();
-    const { data: indikators } = await supabase
-      .from('indikator_pbb')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('urutan');
-
+  /**
+   * Render lembar penilaian satu peserta ke instance jsPDF baru.
+   * Dipakai bersama oleh exportToPDF (zip per peserta).
+   */
+  function renderPesertaPDF(
+    score: ScoreData,
+    pbbGerakan: any[],
+    dantonGerakan: any[]
+  ): jsPDF {
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
       format: 'a4',
     });
 
-    const pbbGerakan = indikators?.filter((ind) => ind.kategori === 'pbb') || [];
-    const dantonGerakan = indikators?.filter((ind) => ind.kategori === 'danton_pbb') || [];
-
-    let pageNum = 0;
-
-    for (const score of scoresData) {
-      if (pageNum > 0) {
-        pdf.addPage();
-      }
-
+    {
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       let yPos = 10;
@@ -596,13 +584,70 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
       pdf.setFontSize(8);
       pdf.setFont('Helvetica', 'normal');
       pdf.text(`Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 15, pageHeight - 10);
-      pdf.text(`Halaman ${pageNum + 1}`, pageWidth - 25, pageHeight - 10);
-
-      pageNum++;
+      pdf.text(`Nomor Urut: ${score.nomor_urut}`, pageWidth - 40, pageHeight - 10);
     }
 
-    const filename = `Lembar_Penilaian_${eventName}_${new Date().toISOString().split('T')[0]}.pdf`;
-    pdf.save(filename);
+    return pdf;
+  }
+
+  /**
+   * Sanitasi nama regu agar aman dijadikan nama file (hilangkan karakter ilegal).
+   */
+  function safeFilename(s: string): string {
+    return s
+      .replace(/[\\/:*?"<>|]/g, '_') // karakter ilegal Windows/macOS/Linux
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 80);
+  }
+
+  async function exportToPDF() {
+    if (scoresData.length === 0) {
+      alert('Tidak ada data untuk diexport');
+      return;
+    }
+
+    const supabase = createClient();
+    const { data: indikators } = await supabase
+      .from('indikator_pbb')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('urutan');
+
+    const pbbGerakan = indikators?.filter((ind) => ind.kategori === 'pbb') || [];
+    const dantonGerakan = indikators?.filter((ind) => ind.kategori === 'danton_pbb') || [];
+
+    const zip = new JSZip();
+    const tanggal = new Date().toISOString().split('T')[0];
+    const eventSafe = safeFilename(eventName) || 'Event';
+
+    // Folder di dalam zip biar rapi
+    const folder = zip.folder(`Lembar_Penilaian_${eventSafe}_${tanggal}`);
+
+    // Generate 1 PDF per peserta
+    for (const score of scoresData) {
+      const pdf = renderPesertaPDF(score, pbbGerakan, dantonGerakan);
+      const pdfBlob = pdf.output('blob');
+
+      // Format: 01_NamaRegu.pdf (zero-padded supaya urut)
+      const noUrut = String(score.nomor_urut).padStart(2, '0');
+      const namaSafe = safeFilename(score.nama_regu) || 'Peserta';
+      const filename = `${noUrut}_${namaSafe}.pdf`;
+
+      folder!.file(filename, pdfBlob);
+    }
+
+    // Generate zip & trigger download
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Lembar_Penilaian_${eventSafe}_${tanggal}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   if (loading) return <p className="text-slate-600">Memuat...</p>;
@@ -630,7 +675,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition"
         >
           <Download className="h-4 w-4" />
-          Export PDF
+          Export PDF (ZIP)
         </button>
       </div>
 
