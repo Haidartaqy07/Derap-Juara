@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import JSZip from 'jszip';
+import { INDIKATOR_VARFOR } from '@/lib/indikator-varfor';
 
 type StatusRow = {
   peserta_id: string;
@@ -519,16 +520,19 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
       pdf.text('VARIASI FORMASI & DANTON', 15, yPos);
       yPos += 5;
 
-      const varforTableData = [
-        ['Opening', score.juri3_scores['V1'] || 0],
-        ['Kualitas Gerakan', score.juri3_scores['V2'] || 0],
-        ['Ragam Gerak', score.juri3_scores['V3'] || 0],
-        ['Unsur PBB', score.juri3_scores['V4'] || 0],
-        ['Konsep & Kreativitas', score.juri3_scores['V5'] || 0],
-        ['Jelajah Lapangan', score.juri3_scores['V6'] || 0],
-        ['Etika & Estetika', score.juri3_scores['V7'] || 0],
-        ['Ending Variasi', score.juri3_scores['V8'] || 0],
-        ['TOTAL VARIASI', score.juri3_total || 0],
+      // Pakai INDIKATOR_VARFOR sebagai source of truth — pisahkan VarFor (V1-V18) & Danton (D1-D6)
+      const varforIndikators = INDIKATOR_VARFOR.filter((i) => i.kategori !== 'danton');
+      const dantonIndikators = INDIKATOR_VARFOR.filter((i) => i.kategori === 'danton');
+
+      const varforItems: [string, number][] = varforIndikators.map((ind) => [
+        ind.nama,
+        score.juri3_scores[ind.kode] || 0,
+      ]);
+      const totalVarforMurni = varforItems.reduce((sum, [, n]) => sum + n, 0);
+
+      const varforTableData: (string | number)[][] = [
+        ...varforItems,
+        ['TOTAL VARIASI', totalVarforMurni],
       ];
 
       autoTable(pdf, {
@@ -556,6 +560,12 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           0: { halign: 'left' },
           1: { halign: 'center' },
         },
+        didParseCell: (data) => {
+          // Bold baris terakhir (TOTAL VARIASI)
+          if (data.section === 'body' && data.row.index === varforTableData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
       });
 
       yPos = (pdf as any).lastAutoTable?.finalY + 5;
@@ -567,14 +577,10 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
       pdf.text('PENILAIAN DANTON SAAT VARIASI & FORMASI', 15, yPos);
       yPos += 5;
 
-      const dantonVarforItems: [string, number][] = [
-        ['Aba-Aba Variasi', score.juri3_scores['D1'] || 0],
-        ['Aba-Aba Formasi', score.juri3_scores['D2'] || 0],
-        ['Aba-Aba Tutup Formasi', score.juri3_scores['D3'] || 0],
-        ['Artikulasi & Intonasi', score.juri3_scores['D4'] || 0],
-        ['Penampilan & Penghayatan', score.juri3_scores['D5'] || 0],
-        ['Sinergi dengan Pasukan', score.juri3_scores['D6'] || 0],
-      ];
+      const dantonVarforItems: [string, number][] = dantonIndikators.map((ind) => [
+        ind.nama,
+        score.juri3_scores[ind.kode] || 0,
+      ]);
 
       const totalDantonVarfor = dantonVarforItems.reduce((sum, [, n]) => sum + n, 0);
 
