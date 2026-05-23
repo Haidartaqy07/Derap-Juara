@@ -2,845 +2,396 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Lock, Unlock, CheckCircle2, Circle, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import JSZip from 'jszip';
-import { INDIKATOR_VARFOR } from '@/lib/indikator-varfor';
+import { RekapNilaiPeserta } from '@/types';
+import {
+  rankJuaraUmum,
+  rankJuaraUtama,
+  rankJuaraPbb,
+  rankJuaraVarfor,
+  rankJuaraDanton,
+  formatWaktu,
+} from '@/lib/scoring';
+import { Trophy, Medal, Award, RefreshCw, CheckCircle2, Circle } from 'lucide-react';
 
-type StatusRow = {
-  peserta_id: string;
-  nama_regu: string;
-  nomor_urut: number;
-  juri1_id: string | null;
-  juri1_submitted: boolean;
-  juri1_locked: boolean;
-  juri2_id: string | null;
-  juri2_submitted: boolean;
-  juri2_locked: boolean;
-  juri3_id: string | null;
-  juri3_submitted: boolean;
-  juri3_locked: boolean;
-};
+type Kategori = 'umum' | 'utama' | 'pbb' | 'varfor' | 'danton';
 
-interface ScoreData {
-  peserta_id: string;
-  nama_regu: string;
-  nomor_urut: number;
-  juri1_scores: { [key: string]: number };
-  juri2_scores: { [key: string]: number };
-  juri3_scores: { [key: string]: number };
-  juri1_total: number;
-  juri2_total: number;
-  juri3_total: number;
+// Format angka jadi poin dengan 1 desimal
+function toPoint(n: number): string {
+  return n.toFixed(1);
 }
 
-export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
-  const [rows, setRows] = useState<StatusRow[]>([]);
-  const [scoresData, setScoresData] = useState<ScoreData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [eventName, setEventName] = useState('');
+// Hitung poin per komponen sesuai rumus baru (poin = nilai_mentah × bobot)
+// PBB & Danton PBB dibagi 2 (rata-rata 2 juri), VarFor & Danton VF tidak dibagi
+function poinPbb60(p: RekapNilaiPeserta): number {
+  return (p.nilai_pbb_total / 2) * 0.6;
+}
+function poinPbb65(p: RekapNilaiPeserta): number {
+  return (p.nilai_pbb_total / 2) * 0.65;
+}
+function poinVarfor30(p: RekapNilaiPeserta): number {
+  return p.nilai_varfor_total * 0.3;
+}
+function poinVarfor25(p: RekapNilaiPeserta): number {
+  return p.nilai_varfor_total * 0.25;
+}
+function poinDantonUmum(p: RekapNilaiPeserta): number {
+  // Danton PBB rata-rata 2 juri + Danton VarFor (juri 3 langsung), × 5%
+  const dantonPbbAvg = p.nilai_danton_pbb_total / 2;
+  return (dantonPbbAvg + p.nilai_danton_varfor_total) * 0.05;
+}
+function poinDantonPbb5(p: RekapNilaiPeserta): number {
+  return (p.nilai_danton_pbb_total / 2) * 0.05;
+}
+function poinDantonVf5(p: RekapNilaiPeserta): number {
+  return p.nilai_danton_varfor_total * 0.05;
+}
+function poinVoting5(p: RekapNilaiPeserta): number {
+  // Voting tetap pakai persen (skala 0-100) karena tidak ada nilai mentah seragam
+  return p.persen_voting * 0.05;
+}
+function skorJuaraUmumPoin(p: RekapNilaiPeserta): number {
+  return poinPbb60(p) + poinVarfor30(p) + poinDantonUmum(p) + poinVoting5(p);
+}
+function skorJuaraUtamaPoin(p: RekapNilaiPeserta): number {
+  return poinPbb65(p) + poinVarfor25(p) + poinDantonPbb5(p) + poinDantonVf5(p);
+}
 
-  const load = useCallback(async () => {
+export default function PeringkatTab({
+  eventId,
+  batasWaktuDetik,
+}: {
+  eventId: string;
+  batasWaktuDetik: number;
+}) {
+  const [rekap, setRekap] = useState<RekapNilaiPeserta[]>([]);
+  const [kategori, setKategori] = useState<Kategori>('umum');
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+
+  const loadRekap = useCallback(async () => {
     const supabase = createClient();
-
-    // Fetch event name
-    const { data: event } = await supabase
-      .from('events')
-      .select('nama_event')
-      .eq('id', eventId)
-      .single();
-
-    if (event) setEventName(event.nama_event);
-
-    const { data: peserta } = await supabase
-      .from('peserta')
+    const { data } = await supabase
+      .from('rekap_nilai_peserta')
       .select('*')
       .eq('event_id', eventId)
       .order('nomor_urut');
-
-    if (!peserta) {
-      setRows([]);
-      setScoresData([]);
-      setLoading(false);
-      return;
-    }
-
-    const pesertaIds = peserta.map((p) => p.id);
-
-    const { data: pbb } = await supabase
-      .from('penilaian_pbb')
-      .select('*')
-      .in('peserta_id', pesertaIds);
-
-    const { data: varfor } = await supabase
-      .from('penilaian_varfor')
-      .select('*')
-      .in('peserta_id', pesertaIds);
-
-    // Fetch detail scores
-    const { data: pbbDetails } = await supabase
-      .from('nilai_detail_pbb')
-      .select('*')
-      .in('penilaian_id', pbb?.map((p) => p.id) || []);
-
-    const { data: varforDetails } = await supabase
-      .from('nilai_detail_varfor')
-      .select('*')
-      .in('penilaian_id', varfor?.map((p) => p.id) || []);
-
-    // Fetch indikators for labels
-    const { data: indikators } = await supabase
-      .from('indikator_pbb')
-      .select('*')
-      .eq('event_id', eventId);
-
-    const result: StatusRow[] = peserta.map((p) => {
-      const j1 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri1');
-      const j2 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri2');
-      const j3 = varfor?.find((x) => x.peserta_id === p.id);
-      return {
-        peserta_id: p.id,
-        nama_regu: p.nama_regu,
-        nomor_urut: p.nomor_urut,
-        juri1_id: j1?.id ?? null,
-        juri1_submitted: j1?.is_submitted ?? false,
-        juri1_locked: j1?.is_locked ?? false,
-        juri2_id: j2?.id ?? null,
-        juri2_submitted: j2?.is_submitted ?? false,
-        juri2_locked: j2?.is_locked ?? false,
-        juri3_id: j3?.id ?? null,
-        juri3_submitted: j3?.is_submitted ?? false,
-        juri3_locked: j3?.is_locked ?? false,
-      };
-    });
-
-    // Build scores data for export
-    const scores: ScoreData[] = peserta.map((p) => {
-      const j1 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri1');
-      const j2 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri2');
-      const j3 = varfor?.find((x) => x.peserta_id === p.id);
-
-      const juri1_scores: { [key: string]: number } = {};
-      const juri2_scores: { [key: string]: number } = {};
-      const juri3_scores: { [key: string]: number } = {};
-      let juri1_total = 0;
-      let juri2_total = 0;
-      let juri3_total = 0;
-
-      if (j1) {
-        pbbDetails?.forEach((d) => {
-          if (d.penilaian_id === j1.id) {
-            const indicator = indikators?.find((i) => i.id === d.indikator_id);
-            if (indicator) {
-              juri1_scores[indicator.id] = d.nilai;
-              juri1_total += d.nilai;
-            }
-          }
-        });
-      }
-
-      if (j2) {
-        pbbDetails?.forEach((d) => {
-          if (d.penilaian_id === j2.id) {
-            const indicator = indikators?.find((i) => i.id === d.indikator_id);
-            if (indicator) {
-              juri2_scores[indicator.id] = d.nilai;
-              juri2_total += d.nilai;
-            }
-          }
-        });
-      }
-
-      if (j3) {
-        varforDetails?.forEach((d) => {
-          if (d.penilaian_id === j3.id) {
-            juri3_scores[d.kode_indikator] = d.nilai;
-            juri3_total += d.nilai;
-          }
-        });
-      }
-
-      return {
-        peserta_id: p.id,
-        nama_regu: p.nama_regu,
-        nomor_urut: p.nomor_urut,
-        juri1_scores,
-        juri2_scores,
-        juri3_scores,
-        juri1_total,
-        juri2_total,
-        juri3_total,
-      };
-    });
-
-    setRows(result);
-    setScoresData(scores);
-    setLoading(false);
+    setRekap(data || []);
+    setLastUpdate(new Date());
   }, [eventId]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadRekap();
 
-  async function toggleLock(
-    table: 'penilaian_pbb' | 'penilaian_varfor',
-    id: string,
-    currentLocked: boolean
-  ) {
-    if (currentLocked && !confirm('Buka kunci penilaian? Juri akan bisa edit nilainya kembali.')) return;
-
+    // Subscribe ke realtime: setiap perubahan submission akan trigger reload
     const supabase = createClient();
-    const { error } = await supabase.from(table).update({ is_locked: !currentLocked }).eq('id', id);
+    const channel = supabase
+      .channel(`event-${eventId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'penilaian_pbb' },
+        () => loadRekap()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'penilaian_varfor' },
+        () => loadRekap()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'nilai_detail_pbb' },
+        () => loadRekap()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'nilai_detail_varfor' },
+        () => loadRekap()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'voting' },
+        () => loadRekap()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'peserta' },
+        () => loadRekap()
+      )
+      .subscribe();
 
-    if (error) alert('Gagal: ' + error.message);
-    await load();
-  }
-
-  async function exportToExcel() {
-    if (scoresData.length === 0) {
-      alert('Tidak ada data untuk diexport');
-      return;
-    }
-
-    const supabase = createClient();
-    const { data: indikators } = await supabase
-      .from('indikator_pbb')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('urutan');
-
-    const workbook = XLSX.utils.book_new();
-
-    // Buat sheet untuk setiap peserta
-    for (const score of scoresData) {
-      const data: any[] = [];
-
-      // Row 0: Header
-      data.push(['Lembar Penilaian', '', '', '', '', '', 'Lembar Penilaian LOBB ANASHERA PART III 2026', '', '', '', eventName]);
-
-      // Row 1: Empty
-      data.push([]);
-
-      // Row 2: Info Peserta
-      data.push(['Nama Satuan/Club', '', '', '', '', '', 'Nomor Urut', '', '', '', 'Waktu']);
-
-      // Row 3: Data Peserta
-      data.push(['', score.nama_regu, '', '', '', '', score.nomor_urut, '', '', '', '']);
-
-      // Row 4: Empty
-      data.push([]);
-
-      // Row 5: PBB Header
-      data.push(['PBB', '', '', '', '', '', 'No', 'Indikator Penilaian', 'Nilai', '', '']);
-
-      // Row 6: Column headers
-      data.push(['No', 'Materi Penilaian', 'Nilai', '', 'Jumlah', '', 'VARIASI', '', '', '', 'PENGURANG']);
-
-      // Row 7: Juri columns
-      data.push(['', '', 'Juri 1', 'Juri 2', '', '', '1', 'Opening', '', '', 'No']);
-
-      // Row 8+: PBB Gerakan
-      const pbbGerakan = indikators?.filter((ind) => ind.kategori === 'pbb') || [];
-      pbbGerakan.forEach((ind, idx) => {
-        data.push([
-          idx + 1,
-          ind.nama_gerakan,
-          score.juri1_scores[ind.id] || '',
-          score.juri2_scores[ind.id] || '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-          '',
-        ]);
-      });
-
-      // Total PBB row
-      data.push([
-        'Total',
-        '',
-        score.juri1_total || 0,
-        score.juri2_total || 0,
-        '',
-        '',
-        'TOTAL',
-        '',
-        score.juri3_total || 0,
-        '',
-        '',
-      ]);
-
-      // Add VarFor section header
-      const varforRowStart = data.length + 1;
-      data.push([]);
-      data.push(['VARIASI FORMASI & DANTON PENAMPILAN']);
-
-      // Add DANPAS section
-      data.push(['']);
-      data.push(['DANPAS PBB', '', '', '', '', '', '', '', '', '', '']);
-      data.push(['No', 'Materi Penilaian', 'Nilai', '', 'Jumlah', '', 'No', 'Indikator Penilaian', 'Nilai', '', 'Total']);
-      data.push(['', '', 'Juri 1', 'Juri 2', '', '', '', '', '', '', '']);
-
-      // DANPAS items
-      const danpasItems = ['Sikap Badan', 'Volume Suara', 'Artikulasi/Intonasi Suara', 'Penguasaan Materi', 'Penguasaan Pasukan', 'Penguasaan Lapangan'];
-      danpasItems.forEach((item, idx) => {
-        data.push([idx + 1, item, '', '', '', '', '', '', '', '', '']);
-      });
-
-      // DANPAS Total
-      data.push(['Total', '', 0, 0, '', '', '', '', '', '', '']);
-
-      const ws = XLSX.utils.aoa_to_sheet(data);
-
-      // Set column widths
-      ws['!cols'] = [
-        { wch: 5 },  // A
-        { wch: 30 }, // B
-        { wch: 10 }, // C
-        { wch: 10 }, // D
-        { wch: 10 }, // E
-        { wch: 5 },  // F
-        { wch: 15 }, // G
-        { wch: 25 }, // H
-        { wch: 10 }, // I
-        { wch: 5 },  // J
-        { wch: 15 }, // K
-      ];
-
-      XLSX.utils.book_append_sheet(workbook, ws, `Nomor Urut ${score.nomor_urut}`);
-    }
-
-    // Sheet Rekap Akhir
-    const rekapData: any[] = [['Nomor Urut', 'Nama Regu', 'Juri 1 (PBB)', 'Juri 2 (PBB)', 'Juri 3 (VarFor)']];
-    scoresData.forEach((score) => {
-      rekapData.push([
-        score.nomor_urut,
-        score.nama_regu,
-        score.juri1_total > 0 ? score.juri1_total : '-',
-        score.juri2_total > 0 ? score.juri2_total : '-',
-        score.juri3_total > 0 ? score.juri3_total : '-',
-      ]);
-    });
-
-    const rekapSheet = XLSX.utils.aoa_to_sheet(rekapData);
-    XLSX.utils.book_append_sheet(workbook, rekapSheet, 'Rekap Akhir');
-
-    const filename = `Lembar_Penilaian_${eventName}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(workbook, filename);
-  }
-
-  /**
-   * Render lembar penilaian satu peserta ke instance jsPDF baru.
-   * Dipakai bersama oleh exportToPDF (zip per peserta).
-   */
-  function renderPesertaPDF(
-    score: ScoreData,
-    pbbGerakan: any[],
-    dantonGerakan: any[]
-  ): jsPDF {
-    // Format rata-rata: tampilkan desimal hanya kalau perlu (33 → "33", 33.5 → "33.5")
-    const formatAvg = (n: number): string => {
-      return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    return () => {
+      supabase.removeChannel(channel);
     };
+  }, [eventId, loadRekap]);
 
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    {
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let yPos = 10;
-
-      // Header
-      pdf.setFontSize(14);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.text('Lembar Penilaian', pageWidth / 2, yPos, { align: 'center' });
-      yPos += 5;
-
-      pdf.setFontSize(11);
-      pdf.text('LOBB ANASHERA PART III 2026', pageWidth / 2, yPos, { align: 'center' });
-      yPos += 5;
-
-      pdf.setFontSize(10);
-      pdf.text(eventName, pageWidth / 2, yPos, { align: 'center' });
-      yPos += 8;
-
-      // Info Peserta
-      pdf.setFont('Helvetica', 'normal');
-      pdf.setFontSize(9);
-      pdf.text(`Nama Satuan/Club: ${score.nama_regu}`, 15, yPos);
-      pdf.text(`Nomor Urut: ${score.nomor_urut}`, 130, yPos);
-      pdf.text(`Waktu: `, 220, yPos);
-      yPos += 6;
-
-      // ===== TABLE PBB =====
-      const pbbTableData: any[] = [];
-
-      // Header row
-      const pbbHeaders: any[] = [['No', 'Materi Penilaian', 'Juri 1', 'Juri 2', 'Jumlah']];
-
-      // Data rows + hitung total khusus PBB (bukan pakai juri{1,2}_total yang gabung dgn danton)
-      let totalPbbJuri1 = 0;
-      let totalPbbJuri2 = 0;
-      pbbGerakan.forEach((ind, idx) => {
-        const nilai1 = score.juri1_scores[ind.id] || 0;
-        const nilai2 = score.juri2_scores[ind.id] || 0;
-        totalPbbJuri1 += nilai1;
-        totalPbbJuri2 += nilai2;
-        pbbTableData.push([
-          idx + 1,
-          ind.nama_gerakan,
-          nilai1,
-          nilai2,
-          formatAvg((nilai1 + nilai2) / 2),
-        ]);
-      });
-
-      // Total row — rata-rata total juri1 & juri2
-      pbbTableData.push([
-        'Total',
-        '',
-        totalPbbJuri1,
-        totalPbbJuri2,
-        formatAvg((totalPbbJuri1 + totalPbbJuri2) / 2),
-      ]);
-
-      // Label PBB (sebelum tabel)
-      pdf.setFontSize(10);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.text('PBB', 15, yPos);
-      yPos += 5;
-
-      autoTable(pdf, {
-        head: pbbHeaders,
-        body: pbbTableData,
-        startY: yPos,
-        margin: 15,
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        headStyles: {
-          fillColor: [180, 180, 180],
-          textColor: 0,
-          fontStyle: 'bold',
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        bodyStyles: {
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        didParseCell: (data) => {
-          // Bold baris terakhir (Total)
-          if (data.section === 'body' && data.row.index === pbbTableData.length - 1) {
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
-        didDrawPage: function (data) {
-          // Tidak perlu karena kita manage manually
-        },
-      });
-
-      yPos = (pdf as any).lastAutoTable?.finalY + 5 || yPos + 60;
-
-      // ===== TABLE DANPAS PBB =====
-      const danpasTableData: any[] = [];
-
-      let totalDanpasJuri1 = 0;
-      let totalDanpasJuri2 = 0;
-      dantonGerakan.forEach((ind, idx) => {
-        const nilai1 = score.juri1_scores[ind.id] || 0;
-        const nilai2 = score.juri2_scores[ind.id] || 0;
-        totalDanpasJuri1 += nilai1;
-        totalDanpasJuri2 += nilai2;
-        danpasTableData.push([
-          idx + 1,
-          ind.nama_gerakan,
-          nilai1,
-          nilai2,
-          formatAvg((nilai1 + nilai2) / 2),
-        ]);
-      });
-
-      danpasTableData.push([
-        'Total',
-        '',
-        totalDanpasJuri1,
-        totalDanpasJuri2,
-        formatAvg((totalDanpasJuri1 + totalDanpasJuri2) / 2),
-      ]);
-
-      pdf.setFontSize(10);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.text('DANPAS PBB', 15, yPos);
-      yPos += 5;
-
-      autoTable(pdf, {
-        head: [['No', 'Materi Penilaian', 'Juri 1', 'Juri 2', 'Jumlah']],
-        body: danpasTableData,
-        startY: yPos,
-        margin: 15,
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        headStyles: {
-          fillColor: [180, 180, 180],
-          textColor: 0,
-          fontStyle: 'bold',
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        bodyStyles: {
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        didParseCell: (data) => {
-          // Bold baris terakhir (Total)
-          if (data.section === 'body' && data.row.index === danpasTableData.length - 1) {
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
-      });
-
-      yPos = (pdf as any).lastAutoTable?.finalY + 8 || yPos + 40;
-
-      // ===== VARIASI FORMASI SECTION =====
-      pdf.setFontSize(10);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.text('VARIASI FORMASI & DANTON', 15, yPos);
-      yPos += 5;
-
-      // Pakai INDIKATOR_VARFOR sebagai source of truth — pisahkan VarFor (V1-V18) & Danton (D1-D6)
-      const varforIndikators = INDIKATOR_VARFOR.filter((i) => i.kategori !== 'danton');
-      const dantonIndikators = INDIKATOR_VARFOR.filter((i) => i.kategori === 'danton');
-
-      const varforItems: [string, number][] = varforIndikators.map((ind) => [
-        ind.nama,
-        score.juri3_scores[ind.kode] || 0,
-      ]);
-      const totalVarforMurni = varforItems.reduce((sum, [, n]) => sum + n, 0);
-
-      const varforTableData: (string | number)[][] = [
-        ...varforItems,
-        ['TOTAL VARIASI', totalVarforMurni],
-      ];
-
-      autoTable(pdf, {
-        head: [['Indikator', 'Nilai']],
-        body: varforTableData,
-        startY: yPos,
-        margin: 15,
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        headStyles: {
-          fillColor: [180, 180, 180],
-          textColor: 0,
-          fontStyle: 'bold',
-        },
-        bodyStyles: {
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        columnStyles: {
-          0: { halign: 'left' },
-          1: { halign: 'center' },
-        },
-        didParseCell: (data) => {
-          // Bold baris terakhir (TOTAL VARIASI)
-          if (data.section === 'body' && data.row.index === varforTableData.length - 1) {
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
-      });
-
-      yPos = (pdf as any).lastAutoTable?.finalY + 5;
-
-      // ===== DANTON SECTION =====
-      yPos += 3;
-      pdf.setFontSize(10);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.text('PENILAIAN DANTON SAAT VARIASI & FORMASI', 15, yPos);
-      yPos += 5;
-
-      const dantonVarforItems: [string, number][] = dantonIndikators.map((ind) => [
-        ind.nama,
-        score.juri3_scores[ind.kode] || 0,
-      ]);
-
-      const totalDantonVarfor = dantonVarforItems.reduce((sum, [, n]) => sum + n, 0);
-
-      const dantonTableData: (string | number)[][] = [
-        ...dantonVarforItems,
-        ['TOTAL DANTON', totalDantonVarfor],
-      ];
-
-      autoTable(pdf, {
-        head: [['Indikator', 'Nilai']],
-        body: dantonTableData,
-        startY: yPos,
-        margin: 15,
-        theme: 'grid',
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        headStyles: {
-          fillColor: [180, 180, 180],
-          textColor: 0,
-          fontStyle: 'bold',
-        },
-        bodyStyles: {
-          lineColor: 0,
-          lineWidth: 0.3,
-        },
-        columnStyles: {
-          0: { halign: 'left' },
-          1: { halign: 'center' },
-        },
-        didParseCell: (data) => {
-          // Bold baris terakhir (TOTAL DANTON)
-          if (data.section === 'body' && data.row.index === dantonTableData.length - 1) {
-            data.cell.styles.fontStyle = 'bold';
-          }
-        },
-      });
-
-      // Add footer with page number
-      pdf.setFontSize(8);
-      pdf.setFont('Helvetica', 'normal');
-      pdf.text(`Tanggal: ${new Date().toLocaleDateString('id-ID')}`, 15, pageHeight - 10);
-      pdf.text(`Nomor Urut: ${score.nomor_urut}`, pageWidth - 40, pageHeight - 10);
-    }
-
-    return pdf;
-  }
-
-  /**
-   * Sanitasi nama regu agar aman dijadikan nama file (hilangkan karakter ilegal).
-   */
-  function safeFilename(s: string): string {
-    return s
-      .replace(/[\\/:*?"<>|]/g, '_') // karakter ilegal Windows/macOS/Linux
-      .replace(/\s+/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '')
-      .slice(0, 80);
-  }
-
-  async function exportToPDF() {
-    if (scoresData.length === 0) {
-      alert('Tidak ada data untuk diexport');
-      return;
-    }
-
-    const supabase = createClient();
-    const { data: indikators } = await supabase
-      .from('indikator_pbb')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('urutan');
-
-    const pbbGerakan = indikators?.filter((ind) => ind.kategori === 'pbb') || [];
-    const dantonGerakan = indikators?.filter((ind) => ind.kategori === 'danton_pbb') || [];
-
-    const zip = new JSZip();
-    const tanggal = new Date().toISOString().split('T')[0];
-    const eventSafe = safeFilename(eventName) || 'Event';
-
-    // Folder di dalam zip biar rapi
-    const folder = zip.folder(`Lembar_Penilaian_${eventSafe}_${tanggal}`);
-
-    // Generate 1 PDF per peserta
-    for (const score of scoresData) {
-      const pdf = renderPesertaPDF(score, pbbGerakan, dantonGerakan);
-      const pdfBlob = pdf.output('blob');
-
-      // Format: 01_NamaRegu.pdf (zero-padded supaya urut)
-      const noUrut = String(score.nomor_urut).padStart(2, '0');
-      const namaSafe = safeFilename(score.nama_regu) || 'Peserta';
-      const filename = `${noUrut}_${namaSafe}.pdf`;
-
-      folder!.file(filename, pdfBlob);
-    }
-
-    // Generate zip & trigger download
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(zipBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Lembar_Penilaian_${eventSafe}_${tanggal}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  if (loading) return <p className="text-slate-600">Memuat...</p>;
+  let sorted: RekapNilaiPeserta[] = [];
+  if (kategori === 'umum') sorted = rankJuaraUmum(rekap);
+  else if (kategori === 'utama') sorted = rankJuaraUtama(rekap);
+  else if (kategori === 'pbb') sorted = rankJuaraPbb(rekap);
+  else if (kategori === 'varfor') sorted = rankJuaraVarfor(rekap);
+  else sorted = rankJuaraDanton(rekap, batasWaktuDetik);
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-medium">Buka kunci untuk revisi</p>
-        <p className="mt-1 text-amber-800">
-          Setelah juri klik submit, nilai akan terkunci otomatis. Buka kunci di sini jika ada juri
-          yang perlu merevisi nilainya.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          <KatBtn aktif={kategori === 'umum'} onClick={() => setKategori('umum')}>
+            Juara Umum
+          </KatBtn>
+          <KatBtn aktif={kategori === 'utama'} onClick={() => setKategori('utama')}>
+            Juara Utama - Terakhir
+          </KatBtn>
+          <KatBtn aktif={kategori === 'pbb'} onClick={() => setKategori('pbb')}>
+            PBB Terbaik
+          </KatBtn>
+          <KatBtn aktif={kategori === 'varfor'} onClick={() => setKategori('varfor')}>
+            Variasi Formasi Terbaik
+          </KatBtn>
+          <KatBtn aktif={kategori === 'danton'} onClick={() => setKategori('danton')}>
+            Danton Terbaik
+          </KatBtn>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span className="flex h-2 w-2 animate-pulse rounded-full bg-green-500"></span>
+          Live • Update: {lastUpdate.toLocaleTimeString('id-ID')}
+          <button
+            onClick={loadRekap}
+            className="ml-1 rounded p-1 hover:bg-slate-100"
+            aria-label="Refresh"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-2">
-        {/* <button
-          onClick={exportToExcel}
-          className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition"
-        >
-          <Download className="h-4 w-4" />
-          Export Excel
-        </button> */}
-        <button
-          onClick={exportToPDF}
-          className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition"
-        >
-          <Download className="h-4 w-4" />
-          Export PDF (ZIP)
-        </button>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table id="penilaian-table" className="w-full">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">No</th>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Regu</th>
-              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
-                Juri 1 (PBB)
-              </th>
-              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
-                Juri 2 (PBB)
-              </th>
-              <th className="px-3 py-2 text-center text-xs font-semibold text-slate-600">
-                Juri 3 (VarFor)
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {rows.length === 0 ? (
+      {rekap.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
+          Belum ada peserta. Tambahkan peserta dulu di tab Peserta.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <table className="w-full">
+            <thead className="bg-slate-50">
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
-                  Belum ada peserta
-                </td>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Rank</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Regu</th>
+                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-600">Status</th>
+                {kategori === 'umum' && (
+                  <>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      PBB 60%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      VarFor 30%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Danton 5%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Voting 5%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-bold text-blue-700">SKOR</th>
+                  </>
+                )}
+                {kategori === 'utama' && (
+                  <>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      PBB 65%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      VarFor 25%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Dnt PBB 5%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Dnt VF 5%
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-bold text-blue-700">SKOR</th>
+                  </>
+                )}
+                {kategori === 'pbb' && (
+                  <>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Nilai PBB
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Jalan (tie-break)
+                    </th>
+                  </>
+                )}
+                {kategori === 'varfor' && (
+                  <>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Nilai VarFor
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Formasi (tie-break)
+                    </th>
+                  </>
+                )}
+                {kategori === 'danton' && (
+                  <>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Danton PBB
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Danton VF
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Total
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
+                      Waktu
+                    </th>
+                  </>
+                )}
               </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.peserta_id}>
-                  <td className="px-3 py-3 font-mono text-sm">#{r.nomor_urut}</td>
-                  <td className="px-3 py-3 text-sm font-medium">{r.nama_regu}</td>
-                  <StatusCell
-                    submitted={r.juri1_submitted}
-                    locked={r.juri1_locked}
-                    onToggle={
-                      r.juri1_id
-                        ? () => toggleLock('penilaian_pbb', r.juri1_id!, r.juri1_locked)
-                        : undefined
-                    }
-                  />
-                  <StatusCell
-                    submitted={r.juri2_submitted}
-                    locked={r.juri2_locked}
-                    onToggle={
-                      r.juri2_id
-                        ? () => toggleLock('penilaian_pbb', r.juri2_id!, r.juri2_locked)
-                        : undefined
-                    }
-                  />
-                  <StatusCell
-                    submitted={r.juri3_submitted}
-                    locked={r.juri3_locked}
-                    onToggle={
-                      r.juri3_id
-                        ? () => toggleLock('penilaian_varfor', r.juri3_id!, r.juri3_locked)
-                        : undefined
-                    }
-                  />
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {sorted.map((p, i) => (
+                <tr key={p.peserta_id} className={i < 3 ? 'bg-amber-50/40' : ''}>
+                  <td className="px-3 py-3">
+                    <RankBadge rank={i + 1} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="font-semibold text-slate-900">{p.nama_regu}</div>
+                    <div className="text-xs text-slate-500">No urut #{p.nomor_urut}</div>
+                  </td>
+                  <td className="px-3 py-3">
+                    <div className="flex gap-1">
+                      <StatusDot ok={p.juri1_submitted} label="J1" />
+                      <StatusDot ok={p.juri2_submitted} label="J2" />
+                      <StatusDot ok={p.juri3_submitted} label="J3" />
+                    </div>
+                  </td>
+
+                  {kategori === 'umum' && (
+                    <>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinPbb60(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor30(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonUmum(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVoting5(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
+                        {toPoint(skorJuaraUmumPoin(p))}
+                      </td>
+                    </>
+                  )}
+
+                  {kategori === 'utama' && (
+                    <>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinPbb65(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor25(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonPbb5(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonVf5(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
+                        {toPoint(skorJuaraUtamaPoin(p))}
+                      </td>
+                    </>
+                  )}
+
+                  {kategori === 'pbb' && (
+                    <>
+                      <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
+                        {toPoint(p.nilai_pbb_total)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
+                        {toPoint(p.nilai_gerakan_jalan)}
+                      </td>
+                    </>
+                  )}
+
+                  {kategori === 'varfor' && (
+                    <>
+                      <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
+                        {toPoint(p.nilai_varfor_total)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
+                        {toPoint(p.nilai_formasi_only)}
+                      </td>
+                    </>
+                  )}
+
+                  {kategori === 'danton' && (
+                    <>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(p.nilai_danton_pbb_total)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(p.nilai_danton_varfor_total)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
+                        {toPoint(p.nilai_danton_pbb_total + p.nilai_danton_varfor_total)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
+                        {formatWaktu(p.waktu_tampil_detik)}
+                      </td>
+                    </>
+                  )}
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatusCell({
-  submitted,
-  locked,
-  onToggle,
+function KatBtn({
+  aktif,
+  onClick,
+  children,
 }: {
-  submitted: boolean;
-  locked: boolean;
-  onToggle?: () => void;
+  aktif: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
-  if (!submitted) {
-    return (
-      <td className="px-3 py-3 text-center">
-        <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs text-slate-500">
-          <Circle className="h-3 w-3" />
-          Belum
-        </span>
-      </td>
-    );
-  }
   return (
-    <td className="px-3 py-3 text-center">
-      <div className="flex flex-col items-center gap-1">
-        <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-          <CheckCircle2 className="h-3 w-3" />
-          Submitted
-        </span>
-        {onToggle && (
-          <button
-            onClick={onToggle}
-            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition ${
-              locked
-                ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-            }`}
-          >
-            {locked ? (
-              <>
-                <Lock className="h-3 w-3" />
-                Terkunci • Buka
-              </>
-            ) : (
-              <>
-                <Unlock className="h-3 w-3" />
-                Terbuka
-              </>
-            )}
-          </button>
-        )}
+    <button
+      onClick={onClick}
+      className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+        aktif ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank === 1)
+    return (
+      <div className="flex items-center gap-1.5">
+        <Trophy className="h-5 w-5 text-amber-500" />
+        <span className="font-bold text-amber-700">1</span>
       </div>
-    </td>
+    );
+  if (rank === 2)
+    return (
+      <div className="flex items-center gap-1.5">
+        <Medal className="h-5 w-5 text-slate-400" />
+        <span className="font-bold text-slate-700">2</span>
+      </div>
+    );
+  if (rank === 3)
+    return (
+      <div className="flex items-center gap-1.5">
+        <Award className="h-5 w-5 text-orange-600" />
+        <span className="font-bold text-orange-700">3</span>
+      </div>
+    );
+  return <span className="ml-1 font-mono text-sm text-slate-500">#{rank}</span>;
+}
+
+function StatusDot({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      title={`${label}: ${ok ? 'Submitted' : 'Belum'}`}
+      className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs font-medium ${
+        ok ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+      }`}
+    >
+      {ok ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
+      {label}
+    </span>
   );
 }
