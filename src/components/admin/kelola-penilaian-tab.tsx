@@ -342,6 +342,11 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
     pbbGerakan: any[],
     dantonGerakan: any[]
   ): jsPDF {
+    // Format rata-rata: tampilkan desimal hanya kalau perlu (33 → "33", 33.5 → "33.5")
+    const formatAvg = (n: number): string => {
+      return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    };
+
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
@@ -394,17 +399,17 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           ind.nama_gerakan,
           nilai1,
           nilai2,
-          nilai1 + nilai2,
+          formatAvg((nilai1 + nilai2) / 2),
         ]);
       });
 
-      // Total row
+      // Total row — rata-rata total juri1 & juri2
       pbbTableData.push([
         'Total',
         '',
         totalPbbJuri1,
         totalPbbJuri2,
-        totalPbbJuri1 + totalPbbJuri2,
+        formatAvg((totalPbbJuri1 + totalPbbJuri2) / 2),
       ]);
 
       // Label PBB (sebelum tabel)
@@ -464,7 +469,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           ind.nama_gerakan,
           nilai1,
           nilai2,
-          nilai1 + nilai2,
+          formatAvg((nilai1 + nilai2) / 2),
         ]);
       });
 
@@ -473,7 +478,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
         '',
         totalDanpasJuri1,
         totalDanpasJuri2,
-        totalDanpasJuri1 + totalDanpasJuri2,
+        formatAvg((totalDanpasJuri1 + totalDanpasJuri2) / 2),
       ]);
 
       pdf.setFontSize(10);

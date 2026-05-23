@@ -15,6 +15,47 @@ import { Trophy, Medal, Award, RefreshCw, CheckCircle2, Circle } from 'lucide-re
 
 type Kategori = 'umum' | 'utama' | 'pbb' | 'varfor' | 'danton';
 
+// Format angka jadi poin dengan 1 desimal
+function toPoint(n: number): string {
+  return n.toFixed(1);
+}
+
+// Hitung poin per komponen sesuai rumus baru (poin = nilai_mentah × bobot)
+// PBB & Danton PBB dibagi 2 (rata-rata 2 juri), VarFor & Danton VF tidak dibagi
+function poinPbb60(p: RekapNilaiPeserta): number {
+  return (p.nilai_pbb_total / 2) * 0.6;
+}
+function poinPbb65(p: RekapNilaiPeserta): number {
+  return (p.nilai_pbb_total / 2) * 0.65;
+}
+function poinVarfor30(p: RekapNilaiPeserta): number {
+  return p.nilai_varfor_total * 0.3;
+}
+function poinVarfor25(p: RekapNilaiPeserta): number {
+  return p.nilai_varfor_total * 0.25;
+}
+function poinDantonUmum(p: RekapNilaiPeserta): number {
+  // Gabungan Danton PBB (rata-rata 2 juri) + Danton VarFor, dirata-rata, × 5%
+  const dantonPbbAvg = p.nilai_danton_pbb_total / 2;
+  return ((dantonPbbAvg + p.nilai_danton_varfor_total) / 2) * 0.05;
+}
+function poinDantonPbb5(p: RekapNilaiPeserta): number {
+  return (p.nilai_danton_pbb_total / 2) * 0.05;
+}
+function poinDantonVf5(p: RekapNilaiPeserta): number {
+  return p.nilai_danton_varfor_total * 0.05;
+}
+function poinVoting5(p: RekapNilaiPeserta): number {
+  // Voting tetap pakai persen (skala 0-100) karena tidak ada nilai mentah seragam
+  return p.persen_voting * 0.05;
+}
+function skorJuaraUmumPoin(p: RekapNilaiPeserta): number {
+  return poinPbb60(p) + poinVarfor30(p) + poinDantonUmum(p) + poinVoting5(p);
+}
+function skorJuaraUtamaPoin(p: RekapNilaiPeserta): number {
+  return poinPbb65(p) + poinVarfor25(p) + poinDantonPbb5(p) + poinDantonVf5(p);
+}
+
 export default function PeringkatTab({
   eventId,
   batasWaktuDetik,
@@ -225,26 +266,24 @@ export default function PeringkatTab({
 
                   {kategori === 'umum' && (
                     <>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_pbb}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_varfor}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">
-                        {((p.persen_danton_pbb + p.persen_danton_varfor) / 2).toFixed(2)}
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_voting}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinPbb60(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor30(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonUmum(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVoting5(p))}</td>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {p.skor_juara_umum}
+                        {toPoint(skorJuaraUmumPoin(p))}
                       </td>
                     </>
                   )}
 
                   {kategori === 'utama' && (
                     <>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_pbb}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_varfor}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_danton_pbb}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{p.persen_danton_varfor}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinPbb65(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor25(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonPbb5(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonVf5(p))}</td>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {p.skor_juara_utama}
+                        {toPoint(skorJuaraUtamaPoin(p))}
                       </td>
                     </>
                   )}
@@ -252,10 +291,10 @@ export default function PeringkatTab({
                   {kategori === 'pbb' && (
                     <>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {p.nilai_pbb_total}
+                        {toPoint(p.nilai_pbb_total)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
-                        {p.nilai_gerakan_jalan}
+                        {toPoint(p.nilai_gerakan_jalan)}
                       </td>
                     </>
                   )}
@@ -263,10 +302,10 @@ export default function PeringkatTab({
                   {kategori === 'varfor' && (
                     <>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {p.nilai_varfor_total}
+                        {toPoint(p.nilai_varfor_total)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
-                        {p.nilai_formasi_only}
+                        {toPoint(p.nilai_formasi_only)}
                       </td>
                     </>
                   )}
@@ -274,13 +313,13 @@ export default function PeringkatTab({
                   {kategori === 'danton' && (
                     <>
                       <td className="px-3 py-3 text-right font-mono text-sm">
-                        {p.nilai_danton_pbb_total}
+                        {toPoint(p.nilai_danton_pbb_total)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm">
-                        {p.nilai_danton_varfor_total}
+                        {toPoint(p.nilai_danton_varfor_total)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {p.nilai_danton_pbb_total + p.nilai_danton_varfor_total}
+                        {toPoint(p.nilai_danton_pbb_total + p.nilai_danton_varfor_total)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
                         {formatWaktu(p.waktu_tampil_detik)}
