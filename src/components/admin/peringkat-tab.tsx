@@ -35,9 +35,9 @@ function poinVarfor25(p: RekapNilaiPeserta): number {
   return p.nilai_varfor_total * 0.25;
 }
 function poinDantonUmum(p: RekapNilaiPeserta): number {
-  // Gabungan Danton PBB (rata-rata 2 juri) + Danton VarFor, dirata-rata, × 5%
+  // Danton PBB rata-rata 2 juri + Danton VarFor (juri 3 langsung), × 5%
   const dantonPbbAvg = p.nilai_danton_pbb_total / 2;
-  return ((dantonPbbAvg + p.nilai_danton_varfor_total) / 2) * 0.05;
+  return (dantonPbbAvg + p.nilai_danton_varfor_total) * 0.05;
 }
 function poinDantonPbb5(p: RekapNilaiPeserta): number {
   return (p.nilai_danton_pbb_total / 2) * 0.05;
