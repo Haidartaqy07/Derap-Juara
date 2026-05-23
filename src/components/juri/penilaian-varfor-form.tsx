@@ -191,13 +191,13 @@ export default function PenilaianVarforForm({
                 <p className="text-xs text-blue-700">Total VarFor</p>
                 <p className="font-mono text-sm font-bold text-blue-700">
                   {totalVarfor}{' '}
-                  <span className="text-xs font-normal text-blue-600">/ 916</span>
+                  <span className="text-xs font-normal text-blue-600">/ 1000</span>
                 </p>
               </div>
               <div className="rounded-lg bg-purple-50 px-3 py-1.5">
                 <p className="text-xs text-purple-700">Total Danton</p>
                 <p className="font-mono text-sm font-bold text-purple-700">
-                  {totalDanton} <span className="text-xs font-normal text-purple-600">/ 102</span>
+                  {totalDanton} <span className="text-xs font-normal text-purple-600">/ 100</span>
                 </p>
               </div>
               <div className="rounded-lg bg-slate-100 px-3 py-1.5">
