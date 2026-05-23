@@ -133,7 +133,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           if (d.penilaian_id === j1.id) {
             const indicator = indikators?.find((i) => i.id === d.indikator_id);
             if (indicator) {
-              juri1_scores[indicator.nama_gerakan] = d.nilai;
+              juri1_scores[indicator.id] = d.nilai;
               juri1_total += d.nilai;
             }
           }
@@ -145,7 +145,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           if (d.penilaian_id === j2.id) {
             const indicator = indikators?.find((i) => i.id === d.indikator_id);
             if (indicator) {
-              juri2_scores[indicator.nama_gerakan] = d.nilai;
+              juri2_scores[indicator.id] = d.nilai;
               juri2_total += d.nilai;
             }
           }
@@ -246,8 +246,8 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
         data.push([
           idx + 1,
           ind.nama_gerakan,
-          score.juri1_scores[ind.nama_gerakan] || '',
-          score.juri2_scores[ind.nama_gerakan] || '',
+          score.juri1_scores[ind.id] || '',
+          score.juri2_scores[ind.id] || '',
           '',
           '',
           '',
@@ -380,16 +380,20 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
       // Header row
       const pbbHeaders: any[] = [['No', 'Materi Penilaian', 'Juri 1', 'Juri 2', 'Jumlah']];
 
-      // Data rows
+      // Data rows + hitung total khusus PBB (bukan pakai juri{1,2}_total yang gabung dgn danton)
+      let totalPbbJuri1 = 0;
+      let totalPbbJuri2 = 0;
       pbbGerakan.forEach((ind, idx) => {
-        const nilai1 = score.juri1_scores[ind.nama_gerakan] || 0;
-        const nilai2 = score.juri2_scores[ind.nama_gerakan] || 0;
+        const nilai1 = score.juri1_scores[ind.id] || 0;
+        const nilai2 = score.juri2_scores[ind.id] || 0;
+        totalPbbJuri1 += nilai1;
+        totalPbbJuri2 += nilai2;
         pbbTableData.push([
           idx + 1,
           ind.nama_gerakan,
           nilai1,
           nilai2,
-          '',
+          nilai1 + nilai2,
         ]);
       });
 
@@ -397,10 +401,16 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
       pbbTableData.push([
         'Total',
         '',
-        score.juri1_total || 0,
-        score.juri2_total || 0,
-        '',
+        totalPbbJuri1,
+        totalPbbJuri2,
+        totalPbbJuri1 + totalPbbJuri2,
       ]);
+
+      // Label PBB (sebelum tabel)
+      pdf.setFontSize(10);
+      pdf.setFont('Helvetica', 'bold');
+      pdf.text('PBB', 15, yPos);
+      yPos += 5;
 
       autoTable(pdf, {
         head: pbbHeaders,
@@ -425,37 +435,44 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
           lineColor: 0,
           lineWidth: 0.3,
         },
+        didParseCell: (data) => {
+          // Bold baris terakhir (Total)
+          if (data.section === 'body' && data.row.index === pbbTableData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+          }
+        },
         didDrawPage: function (data) {
           // Tidak perlu karena kita manage manually
         },
       });
-
-      // Add label PBB
-      pdf.setFontSize(10);
-      pdf.setFont('Helvetica', 'bold');
-      pdf.text('PBB', 15, yPos - 2);
 
       yPos = (pdf as any).lastAutoTable?.finalY + 5 || yPos + 60;
 
       // ===== TABLE DANPAS PBB =====
       const danpasTableData: any[] = [];
 
+      let totalDanpasJuri1 = 0;
+      let totalDanpasJuri2 = 0;
       dantonGerakan.forEach((ind, idx) => {
+        const nilai1 = score.juri1_scores[ind.id] || 0;
+        const nilai2 = score.juri2_scores[ind.id] || 0;
+        totalDanpasJuri1 += nilai1;
+        totalDanpasJuri2 += nilai2;
         danpasTableData.push([
           idx + 1,
           ind.nama_gerakan,
-          '',
-          '',
-          '',
+          nilai1,
+          nilai2,
+          nilai1 + nilai2,
         ]);
       });
 
       danpasTableData.push([
         'Total',
         '',
-        0,
-        0,
-        '',
+        totalDanpasJuri1,
+        totalDanpasJuri2,
+        totalDanpasJuri1 + totalDanpasJuri2,
       ]);
 
       pdf.setFontSize(10);
@@ -485,6 +502,12 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
         bodyStyles: {
           lineColor: 0,
           lineWidth: 0.3,
+        },
+        didParseCell: (data) => {
+          // Bold baris terakhir (Total)
+          if (data.section === 'body' && data.row.index === danpasTableData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+          }
         },
       });
 
@@ -544,13 +567,20 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
       pdf.text('PENILAIAN DANTON SAAT VARIASI & FORMASI', 15, yPos);
       yPos += 5;
 
-      const dantonTableData = [
+      const dantonVarforItems: [string, number][] = [
         ['Aba-Aba Variasi', score.juri3_scores['D1'] || 0],
         ['Aba-Aba Formasi', score.juri3_scores['D2'] || 0],
         ['Aba-Aba Tutup Formasi', score.juri3_scores['D3'] || 0],
         ['Artikulasi & Intonasi', score.juri3_scores['D4'] || 0],
         ['Penampilan & Penghayatan', score.juri3_scores['D5'] || 0],
         ['Sinergi dengan Pasukan', score.juri3_scores['D6'] || 0],
+      ];
+
+      const totalDantonVarfor = dantonVarforItems.reduce((sum, [, n]) => sum + n, 0);
+
+      const dantonTableData: (string | number)[][] = [
+        ...dantonVarforItems,
+        ['TOTAL DANTON', totalDantonVarfor],
       ];
 
       autoTable(pdf, {
@@ -577,6 +607,12 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
         columnStyles: {
           0: { halign: 'left' },
           1: { halign: 'center' },
+        },
+        didParseCell: (data) => {
+          // Bold baris terakhir (TOTAL DANTON)
+          if (data.section === 'body' && data.row.index === dantonTableData.length - 1) {
+            data.cell.styles.fontStyle = 'bold';
+          }
         },
       });
 
