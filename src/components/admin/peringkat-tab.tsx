@@ -282,8 +282,17 @@ export default function PeringkatTab({
                       <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor25(p))}</td>
                       <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonPbb5(p))}</td>
                       <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonVf5(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {toPoint(skorJuaraUtamaPoin(p))}
+                      <td className="px-3 py-3 text-right font-mono">
+                        <div className="flex flex-col items-end">
+                          <span className="text-base font-bold text-blue-700">
+                            {toPoint(p.skor_juara_utama_bersih)}
+                          </span>
+                          {p.total_penalti_poin > 0 && (
+                            <span className="text-[10px] font-normal text-red-500">
+                              {toPoint(skorJuaraUtamaPoin(p))} − {toPoint(p.total_penalti_poin)}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </>
                   )}

@@ -26,6 +26,7 @@ export interface Peserta {
   nama_regu: string;
   nomor_urut: number | null;
   waktu_tampil_detik: number | null;
+  penalti_manual_poin: number;
 }
 
 export interface IndikatorPbb {
@@ -102,6 +103,11 @@ export interface RekapNilaiPeserta {
   persen_voting: number;
   skor_juara_umum: number;
   skor_juara_utama: number;
+  // Field penalti (skala poin)
+  penalti_waktu_poin: number;
+  penalti_manual_poin: number;
+  total_penalti_poin: number;
+  skor_juara_utama_bersih: number;
 }
 
 // Struktur indikator Variasi Formasi (fixed, sama untuk semua event)

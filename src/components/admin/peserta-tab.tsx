@@ -3,7 +3,16 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Peserta } from '@/types';
-import { Plus, Trash2, Clock, ListOrdered, Check, X, AlertTriangle } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Clock,
+  ListOrdered,
+  Check,
+  X,
+  AlertTriangle,
+  MinusCircle,
+} from 'lucide-react';
 import { formatWaktu } from '@/lib/scoring';
 import ConfirmDialog from '@/components/confirm-dialog';
 
@@ -76,6 +85,14 @@ export default function PesertaTab({
   async function handleUpdateWaktu(id: string, detik: number | null) {
     const supabase = createClient();
     await supabase.from('peserta').update({ waktu_tampil_detik: detik }).eq('id', id);
+    await load();
+  }
+
+  async function handleUpdatePenalti(id: string, poin: number) {
+    const supabase = createClient();
+    // poin yang disimpan selalu non-negatif (admin diasumsikan input angka pengurangan)
+    const nilai = Math.max(0, poin);
+    await supabase.from('peserta').update({ penalti_manual_poin: nilai }).eq('id', id);
     await load();
   }
 
@@ -176,13 +193,16 @@ export default function PesertaTab({
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
                 Penalti Waktu
               </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
+                Penalti
+              </th>
               <th className="px-4 py-2 text-right text-xs font-semibold text-slate-600">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
             {peserta.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
                   Belum ada peserta
                 </td>
               </tr>
@@ -194,6 +214,7 @@ export default function PesertaTab({
                   batasWaktuDetik={batasWaktuDetik}
                   onDelete={() => setHapusTarget(p)}
                   onUpdateWaktu={handleUpdateWaktu}
+                  onUpdatePenalti={handleUpdatePenalti}
                 />
               ))
             )}
@@ -379,11 +400,13 @@ function PesertaRow({
   batasWaktuDetik,
   onDelete,
   onUpdateWaktu,
+  onUpdatePenalti,
 }: {
   peserta: Peserta;
   batasWaktuDetik: number;
   onDelete: () => void;
   onUpdateWaktu: (id: string, detik: number | null) => void;
+  onUpdatePenalti: (id: string, poin: number) => void;
 }) {
   const [editWaktu, setEditWaktu] = useState(false);
   const [menit, setMenit] = useState(
@@ -393,15 +416,25 @@ function PesertaRow({
     peserta.waktu_tampil_detik ? peserta.waktu_tampil_detik % 60 : 0
   );
 
+  // Edit penalti manual
+  const [editPenalti, setEditPenalti] = useState(false);
+  const [draftPenalti, setDraftPenalti] = useState<string>(
+    String(peserta.penalti_manual_poin ?? 0)
+  );
+
   const sudahAdaWaktu = peserta.waktu_tampil_detik != null;
 
-  // Hitung penalti
+  // Hitung penalti waktu otomatis
   const kelebihanDetik =
     peserta.waktu_tampil_detik != null
       ? Math.max(0, peserta.waktu_tampil_detik - batasWaktuDetik)
       : 0;
   const penguranganPoin = kelebihanDetik * 2;
   const kenaPenalti = kelebihanDetik > 0;
+
+  // Penalti manual (dari kolom baru)
+  const penaltiManual = peserta.penalti_manual_poin ?? 0;
+  const adaPenaltiManual = penaltiManual > 0;
 
   function mulaiEdit() {
     setMenit(peserta.waktu_tampil_detik ? Math.floor(peserta.waktu_tampil_detik / 60) : 0);
@@ -412,6 +445,17 @@ function PesertaRow({
   function saveWaktu() {
     onUpdateWaktu(peserta.id, menit * 60 + detik);
     setEditWaktu(false);
+  }
+
+  function mulaiEditPenalti() {
+    setDraftPenalti(String(peserta.penalti_manual_poin ?? 0));
+    setEditPenalti(true);
+  }
+
+  function savePenalti() {
+    const n = parseFloat(draftPenalti);
+    onUpdatePenalti(peserta.id, isNaN(n) ? 0 : n);
+    setEditPenalti(false);
   }
 
   return (
@@ -510,6 +554,58 @@ function PesertaRow({
           <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
             Tepat waktu
           </span>
+        )}
+      </td>
+
+      {/* Kolom Penalti Manual */}
+      <td className="px-4 py-3">
+        {editPenalti ? (
+          <div className="flex items-center gap-1">
+            <span className="text-slate-500">-</span>
+            <input
+              type="number"
+              min={0}
+              step="0.1"
+              value={draftPenalti}
+              onChange={(e) => setDraftPenalti(e.target.value)}
+              autoFocus
+              className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+            />
+            <span className="text-xs text-slate-500">poin</span>
+            <button
+              onClick={savePenalti}
+              className="ml-1 rounded bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Simpan
+            </button>
+            <button
+              onClick={() => setEditPenalti(false)}
+              className="rounded border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Batal
+            </button>
+          </div>
+        ) : adaPenaltiManual ? (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 font-semibold text-red-600">
+              <MinusCircle className="h-3.5 w-3.5" />
+              -{penaltiManual} poin
+            </span>
+            <button
+              onClick={mulaiEditPenalti}
+              className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 hover:bg-slate-200"
+            >
+              Edit
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={mulaiEditPenalti}
+            className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            <MinusCircle className="h-3.5 w-3.5" />
+            Set Penalti
+          </button>
         )}
       </td>
 

@@ -2,12 +2,13 @@ import { RekapNilaiPeserta } from '@/types';
 
 /**
  * Hitung peringkat Juara Utama-Terakhir
+ * Sort by skor BERSIH (skor utama poin − penalti waktu otomatis − penalti manual)
  * Tie-breaker: Nilai PBB tertinggi
  */
 export function rankJuaraUtama(data: RekapNilaiPeserta[]): RekapNilaiPeserta[] {
   return [...data].sort((a, b) => {
-    if (b.skor_juara_utama !== a.skor_juara_utama) {
-      return b.skor_juara_utama - a.skor_juara_utama;
+    if (b.skor_juara_utama_bersih !== a.skor_juara_utama_bersih) {
+      return b.skor_juara_utama_bersih - a.skor_juara_utama_bersih;
     }
     return b.nilai_pbb_total - a.nilai_pbb_total; // tie-breaker
   });
