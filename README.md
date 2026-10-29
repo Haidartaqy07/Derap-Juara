@@ -4,7 +4,7 @@ Aplikasi web untuk penilaian lomba Paskibra dengan 4 role (Admin, Juri1, Juri2, 
 
 ## Tech Stack
 
-- **Next.js 14** (App Router + TypeScript)
+- **Next.js 15** (App Router + TypeScript)
 - **Supabase** (PostgreSQL + Auth + Realtime)
 - **Tailwind CSS** + **shadcn/ui** komponen
 - **Zustand** untuk state management ringan
@@ -28,13 +28,18 @@ Install dulu di komputer Anda:
 4. Pilih region terdekat: **Southeast Asia (Singapore)**
 5. Tunggu ~2 menit sampai project siap
 
-### Langkah 2: Setup Database
+### Langkah 2: Siapkan Database yang Dipakai Aplikasi
 
-1. Di dashboard Supabase, buka menu **SQL Editor** (icon di sidebar kiri)
-2. Klik **New Query**
-3. Copy seluruh isi file `database/schema.sql` dari repo ini
-4. Paste ke editor → klik **Run**
-5. Verifikasi: buka menu **Table Editor**, harus ada 10 tabel
+Aplikasi ini saat ini menargetkan skema Supabase yang sudah dipakai, yaitu tabel
+`events`, `participants`, `pbb_submissions`, `variasi_submissions`, dan `deductions`.
+Di dashboard Supabase, buka **SQL Editor**, lalu jalankan versi terbaru
+[`database/migrations/20261029_lobb_scoring_fix.sql`](./database/migrations/20261029_lobb_scoring_fix.sql).
+Migration akan menambahkan tabel dan kolom pendukung yang diperlukan; migration tidak
+menghapus data peserta atau event.
+
+Jangan jalankan `database/schema.sql` pada database aktif. File itu ditujukan untuk skema
+aplikasi yang lebih lama dan berisi perintah reset tabel. Instalasi database kosong belum
+didukung oleh skema SQL tersebut.
 
 ### Langkah 3: Setup Project Next.js
 
@@ -69,7 +74,9 @@ Cara mendapat kredensial:
 
 ### Langkah 5: Buat User Admin Pertama
 
-Karena tidak ada halaman registrasi publik (untuk keamanan), admin pertama harus dibuat manual:
+Jalankan migration pada Langkah 2 terlebih dahulu. Akun dibuat melalui Supabase Auth;
+tabel `users` lama (jika ada) tidak dapat dipakai untuk login dan tidak otomatis dipindahkan.
+Karena tidak ada halaman registrasi publik, admin pertama harus dibuat manual:
 
 1. Buka **SQL Editor** di Supabase
 2. Jalankan query ini (ganti email & password sesuai keinginan):
@@ -84,8 +91,13 @@ Karena tidak ada halaman registrasi publik (untuk keamanan), admin pertama harus
 INSERT INTO public.profiles (id, username, role)
 SELECT id, 'admin', 'admin'
 FROM auth.users
-WHERE email = 'admin@paskibra.local';
+WHERE email = 'admin@paskibra.local'
+ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, role = 'admin';
 ```
+
+Buat akun juri dari menu **Juri** setelah admin berhasil login. Jika akun lama hanya ada
+di tabel `users`, buat akun Supabase Auth baru melalui menu **Authentication → Users**,
+lalu buat profil dan tetapkan ke event menggunakan aplikasi.
 
 ### Langkah 6: Jalankan Aplikasi
 
@@ -95,7 +107,7 @@ npm run dev
 
 Buka browser ke [http://localhost:3000](http://localhost:3000)
 
-Login dengan email & password yang Anda buat di Langkah 5.
+Login dengan username profil (contoh `admin`) dan password akun Supabase Auth yang dibuat di Langkah 5.
 
 ### Langkah 7: Deploy ke Vercel (Opsional)
 
@@ -126,6 +138,33 @@ paskibra-app/
 ```
 
 ## Cara Pakai
+
+### Rumus Penilaian LOBB 2026
+
+Nilai akhir menggunakan skor mentah dari lembar penilaian, tanpa normalisasi terhadap nilai
+tertinggi event:
+
+- **Juara Utama** = rata-rata PBB × 0,65 + Variasi Formasi × 0,25 + Danpas PBB / 2 +
+  Danpas Variasi/Formasi / 2 − total pengurangan.
+- **Juara Umum** = rata-rata PBB × 0,60 + Variasi Formasi × 0,30 +
+  (Danpas PBB + Danpas Variasi/Formasi) / 4 + proporsi voting × 50 − total pengurangan.
+
+Penilaian akhir baru ditampilkan setelah juri 1, juri 2, dan juri 3 mengirimkan nilai.
+
+Migration `database/migrations/20261029_lobb_scoring_fix.sql` ditujukan untuk database yang
+menggunakan tabel `participants`, `pbb_submissions`, `variasi_submissions`, dan `deductions`.
+File tersebut tidak cocok dengan instalasi `database/schema.sql` di repo ini, yang memakai
+`peserta` dan `penilaian_*`. Jangan jalankan `database/schema.sql` pada database aktif: file itu
+mereset tabel. Skema kedua aplikasi ini perlu diselaraskan sebelum membuat instalasi baru atau
+mengubah database dari satu bentuk ke bentuk lainnya.
+
+Pada skema `participants`, migration membaca skor JSON terbaru yang sudah disubmit, skor Danton
+PBB dari `danton_scores`, item Danton Variasi dari item 19-24, voting dari `vote_count`, dan
+pengurangan dari `deductions`. Skema tersebut tidak menyimpan waktu tampil atau penanda gerakan
+jalan, sehingga penalti waktu tidak dihitung dan tie-break PBB gerakan jalan tidak tersedia.
+
+Bobot LDWC, kategori umur, dan komponen Kostum belum diterapkan karena detail resminya masih perlu
+dikonfirmasi panitia; jangan memakai konfigurasi bobot LOBB untuk event LDWC.
 
 ### Sebagai Admin
 

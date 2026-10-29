@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,11 +10,24 @@ const supabaseAdmin = createClient(
 
 export async function PUT(req: Request) {
   try {
-    const { eventId, nama_event, tanggal, batas_waktu_detik, status } = await req.json();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    if (!eventId || !nama_event?.trim() || !tanggal) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (profileError || profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
+    }
+
+    const { eventId, name, date, batas_waktu_detik, status } = await req.json();
+
+    if (!eventId || !name?.trim() || !date) {
       return NextResponse.json(
-        { error: 'eventId, nama_event, dan tanggal wajib diisi' },
+        { error: 'eventId, name, dan date wajib diisi' },
         { status: 400 },
       );
     }
@@ -26,8 +40,8 @@ export async function PUT(req: Request) {
     const { error } = await supabaseAdmin
       .from('events')
       .update({
-        nama_event: nama_event.trim(),
-        tanggal,
+        name: name.trim(),
+        date,
         batas_waktu_detik: Number(batas_waktu_detik),
         ...(status ? { status } : {}),
       })

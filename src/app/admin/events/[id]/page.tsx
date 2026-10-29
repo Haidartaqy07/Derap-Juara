@@ -58,9 +58,9 @@ export default function EventDetailPage({
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Daftar Event
         </Link>
-        <h2 className="text-xl font-bold text-slate-900">{event.nama_event}</h2>
+        <h2 className="text-xl font-bold text-slate-900">{event.name}</h2>
         <p className="text-sm text-slate-600">
-          {new Date(event.tanggal).toLocaleDateString('id-ID', {
+          {new Date(event.date).toLocaleDateString('id-ID', {
             weekday: 'long',
             day: 'numeric',
             month: 'long',

@@ -59,10 +59,10 @@ export default function GerakanPbbTab({ eventId }: Props) {
         .order('kategori')
         .order('urutan'),
       supabase
-        .from('penilaian_pbb')
-        .select('id, peserta!inner(event_id)')
-        .eq('peserta.event_id', eventId)
-        .eq('is_submitted', true)
+        .from('pbb_submissions')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('submitted', true)
         .limit(1),
     ]);
 

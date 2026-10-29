@@ -55,15 +55,26 @@ export default function PenilaianPbbForm({
 
     setIndikator(ind || []);
 
-    const { data: detail } = await supabase
-      .from('nilai_detail_pbb')
-      .select('*')
-      .eq('penilaian_id', penilaianId);
+    const { data: submission } = await supabase
+      .from('pbb_submissions')
+      .select('pbb_scores, danton_scores')
+      .eq('id', penilaianId)
+      .maybeSingle();
 
     const map: Record<string, number> = {};
-    detail?.forEach((d) => {
-      map[d.indikator_id] = d.nilai;
-    });
+    if (submission) {
+      const pbbScores = Array.isArray(submission.pbb_scores)
+        ? (submission.pbb_scores as Array<{ itemId?: number; value?: number }>)
+        : [];
+      const dantonScores = Array.isArray(submission.danton_scores)
+        ? (submission.danton_scores as Array<{ itemId?: number; value?: number }>)
+        : [];
+      indikator.forEach((item) => {
+        const source = item.kategori === 'pbb' ? pbbScores : dantonScores;
+        const found = source?.find((score) => score.itemId === item.urutan);
+        if (typeof found?.value === 'number') map[item.id] = found.value;
+      });
+    }
     setNilai(map);
     setLoading(false);
   }
@@ -75,9 +86,17 @@ export default function PenilaianPbbForm({
     setSavingId(indikatorId);
 
     const supabase = createClient();
+    const updatedValues = { ...nilai, [indikatorId]: nilaiBaru };
+    const pbbScores = indikator
+      .filter((item) => item.kategori === 'pbb')
+      .map((item) => ({ itemId: item.urutan, value: updatedValues[item.id] ?? 0 }));
+    const dantonScores = indikator
+      .filter((item) => item.kategori === 'danton_pbb')
+      .map((item) => ({ itemId: item.urutan, value: updatedValues[item.id] ?? 0 }));
     const { error } = await supabase
-      .from('nilai_detail_pbb')
-      .upsert({ penilaian_id: penilaianId, indikator_id: indikatorId, nilai: nilaiBaru });
+      .from('pbb_submissions')
+      .update({ pbb_scores: pbbScores, danton_scores: dantonScores })
+      .eq('id', penilaianId);
 
     if (error) {
       alert('Gagal simpan: ' + error.message);
@@ -103,21 +122,9 @@ export default function PenilaianPbbForm({
     setSubmitting(true);
     const supabase = createClient();
 
-    // Isi nilai 0 untuk indikator yang belum dinilai
-    const belumDinilai = indikator.filter((i) => nilai[i.id] === undefined);
-    if (belumDinilai.length > 0) {
-      await supabase.from('nilai_detail_pbb').upsert(
-        belumDinilai.map((i) => ({
-          penilaian_id: penilaianId,
-          indikator_id: i.id,
-          nilai: 0,
-        }))
-      );
-    }
-
     const { error } = await supabase
-      .from('penilaian_pbb')
-      .update({ is_submitted: true, is_locked: true, submitted_at: new Date().toISOString() })
+      .from('pbb_submissions')
+      .update({ submitted: true, submitted_at: new Date().toISOString() })
       .eq('id', penilaianId);
 
     setSubmitting(false);

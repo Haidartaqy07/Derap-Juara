@@ -44,14 +44,19 @@ export default function PenilaianVarforForm({
 
   async function load() {
     const supabase = createClient();
-    const { data: detail } = await supabase
-      .from('nilai_detail_varfor')
-      .select('*')
-      .eq('penilaian_id', penilaianId);
+    const { data: submission } = await supabase
+      .from('variasi_submissions')
+      .select('scores')
+      .eq('id', penilaianId)
+      .maybeSingle();
 
     const map: Record<string, number> = {};
-    detail?.forEach((d) => {
-      map[d.kode_indikator] = d.nilai;
+    const scores = Array.isArray(submission?.scores)
+      ? (submission.scores as Array<{ itemId?: number; value?: number }>)
+      : [];
+    INDIKATOR_VARFOR.forEach((item) => {
+      const score = scores.find((entry) => entry.itemId === item.urutan);
+      if (typeof score?.value === 'number') map[item.kode] = score.value;
     });
     setNilai(map);
     setLoading(false);
@@ -64,9 +69,15 @@ export default function PenilaianVarforForm({
     setSavingKode(kode);
 
     const supabase = createClient();
+    const updatedValues = { ...nilai, [kode]: nilaiBaru };
+    const scores = INDIKATOR_VARFOR.map((item) => ({
+      itemId: item.urutan,
+      value: updatedValues[item.kode] ?? 0,
+    }));
     const { error } = await supabase
-      .from('nilai_detail_varfor')
-      .upsert({ penilaian_id: penilaianId, kode_indikator: kode, nilai: nilaiBaru });
+      .from('variasi_submissions')
+      .update({ scores })
+      .eq('id', penilaianId);
 
     if (error) {
       alert('Gagal simpan: ' + error.message);
@@ -92,21 +103,9 @@ export default function PenilaianVarforForm({
     setSubmitting(true);
     const supabase = createClient();
 
-    // Isi nilai 0 untuk indikator yang belum dinilai
-    const belumDinilai = INDIKATOR_VARFOR.filter((i) => nilai[i.kode] === undefined);
-    if (belumDinilai.length > 0) {
-      await supabase.from('nilai_detail_varfor').upsert(
-        belumDinilai.map((i) => ({
-          penilaian_id: penilaianId,
-          kode_indikator: i.kode,
-          nilai: 0,
-        }))
-      );
-    }
-
     const { error } = await supabase
-      .from('penilaian_varfor')
-      .update({ is_submitted: true, is_locked: true, submitted_at: new Date().toISOString() })
+      .from('variasi_submissions')
+      .update({ submitted: true, submitted_at: new Date().toISOString() })
       .eq('id', penilaianId);
 
     setSubmitting(false);

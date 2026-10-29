@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,11 +8,24 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } },
 );
 
-const ALLOWED_ROLES = ['admin', 'juri_1', 'juri_2', 'juri_3'] as const;
+const ALLOWED_ROLES = ['admin', 'juri1', 'juri2', 'juri3'] as const;
 type Role = (typeof ALLOWED_ROLES)[number];
 
 export async function PUT(req: Request) {
   try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: callerProfile, error: authorizationError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (authorizationError || callerProfile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
+    }
+
     const { userId, username, email, password, role } = await req.json();
 
     if (!userId || !username?.trim()) {

@@ -56,9 +56,9 @@ export default function JuriEventsPage() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-slate-900">{event.nama_event}</h3>
+                  <h3 className="font-semibold text-slate-900">{event.name}</h3>
                   <p className="mt-1 text-sm text-slate-600">
-                    {new Date(event.tanggal).toLocaleDateString('id-ID', {
+                    {new Date(event.date).toLocaleDateString('id-ID', {
                       weekday: 'long',
                       day: 'numeric',
                       month: 'long',

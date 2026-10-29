@@ -2,8 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Penilaian Lomba Paskibra',
-  description: 'Sistem penilaian lomba Paskibra real-time',
+  title: 'Derap Juara | Sistem Penilaian Paskibra',
+  description:
+    'Kelola penilaian juri dan rekapitulasi peringkat lomba Paskibra melalui Derap Juara.',
 };
 
 export const viewport: Viewport = {

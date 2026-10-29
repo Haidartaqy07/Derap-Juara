@@ -44,22 +44,47 @@ export default function JuriPenilaianPage({
     }
     setUserId(user.id);
 
-    const { data: prof } = await supabase
+    const { data: prof, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
-    const userRole = prof?.role as UserRole;
+    if (profileError || !prof || !['juri1', 'juri2', 'juri3'].includes(prof.role)) {
+      setError(profileError?.message ?? 'Akun ini tidak memiliki peran juri.');
+      setLoading(false);
+      return;
+    }
+    const userRole = prof.role as UserRole;
     setRole(userRole);
 
     // 2. Ambil data peserta
-    const { data: pst } = await supabase
-      .from('peserta')
+    const { data: pst, error: participantError } = await supabase
+      .from('participants')
       .select('*')
       .eq('id', pesertaId)
       .single();
-    if (!pst) {
-      setError('Peserta tidak ditemukan');
+    if (participantError || !pst) {
+      setError(participantError?.message ?? 'Peserta tidak ditemukan');
+      setLoading(false);
+      return;
+    }
+    if (pst.event_id !== eventId) {
+      setError('Peserta tidak termasuk dalam event ini.');
+      setLoading(false);
+      return;
+    }
+
+    const { data: assignment, error: assignmentError } = await supabase
+      .from('event_judges')
+      .select('event_id')
+      .eq('event_id', eventId)
+      .eq('user_id', user.id)
+      .eq('tipe_juri', userRole)
+      .maybeSingle();
+    if (assignmentError || !assignment) {
+      setError(
+        assignmentError?.message ?? 'Anda tidak ditugaskan sebagai juri untuk event ini.'
+      );
       setLoading(false);
       return;
     }
@@ -69,27 +94,30 @@ export default function JuriPenilaianPage({
     if (userRole === 'juri1' || userRole === 'juri2') {
       // Cek penilaian_pbb sudah ada?
       const { data: existing } = await supabase
-        .from('penilaian_pbb')
-        .select('id, is_submitted, is_locked')
-        .eq('peserta_id', pesertaId)
-        .eq('tipe_juri', userRole)
+        .from('pbb_submissions')
+        .select('id, submitted')
+        .eq('participant_id', pesertaId)
+        .eq('juri_role', userRole)
         .maybeSingle();
 
       if (existing) {
         setPenilaianId(existing.id);
-        setIsSubmitted(existing.is_submitted);
-        setIsLocked(existing.is_locked);
+        setIsSubmitted(existing.submitted);
+        setIsLocked(existing.submitted);
       } else {
-        // Buat row baru
         const { data: created, error: createErr } = await supabase
-          .from('penilaian_pbb')
-          .insert({
-            peserta_id: pesertaId,
-            juri_id: user.id,
-            tipe_juri: userRole,
-            is_submitted: false,
-            is_locked: false,
-          })
+          .from('pbb_submissions')
+          .upsert(
+            {
+              participant_id: pesertaId,
+              event_id: eventId,
+              juri_role: userRole,
+              pbb_scores: [],
+              danton_scores: [],
+              submitted: false,
+            },
+            { onConflict: 'participant_id,juri_role' }
+          )
           .select()
           .single();
 
@@ -101,26 +129,30 @@ export default function JuriPenilaianPage({
         setPenilaianId(created.id);
       }
     } else if (userRole === 'juri3') {
-      // Cek penilaian_varfor sudah ada?
       const { data: existing } = await supabase
-        .from('penilaian_varfor')
-        .select('id, is_submitted, is_locked')
-        .eq('peserta_id', pesertaId)
+        .from('variasi_submissions')
+        .select('id, submitted')
+        .eq('participant_id', pesertaId)
+        .eq('juri_role', userRole)
         .maybeSingle();
 
       if (existing) {
         setPenilaianId(existing.id);
-        setIsSubmitted(existing.is_submitted);
-        setIsLocked(existing.is_locked);
+        setIsSubmitted(existing.submitted);
+        setIsLocked(existing.submitted);
       } else {
         const { data: created, error: createErr } = await supabase
-          .from('penilaian_varfor')
-          .insert({
-            peserta_id: pesertaId,
-            juri_id: user.id,
-            is_submitted: false,
-            is_locked: false,
-          })
+          .from('variasi_submissions')
+          .upsert(
+            {
+              participant_id: pesertaId,
+              event_id: eventId,
+              juri_role: userRole,
+              scores: [],
+              submitted: false,
+            },
+            { onConflict: 'participant_id,juri_role' }
+          )
           .select()
           .single();
 

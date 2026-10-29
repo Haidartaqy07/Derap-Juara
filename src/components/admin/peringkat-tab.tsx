@@ -9,51 +9,16 @@ import {
   rankJuaraPbb,
   rankJuaraVarfor,
   rankJuaraDanton,
+  computeLobbRankings,
+  isPenilaianLengkap,
   formatWaktu,
 } from '@/lib/scoring';
 import { Trophy, Medal, Award, RefreshCw, CheckCircle2, Circle } from 'lucide-react';
 
 type Kategori = 'umum' | 'utama' | 'pbb' | 'varfor' | 'danton';
 
-// Format angka jadi poin dengan 1 desimal
-function toPoint(n: number): string {
-  return n.toFixed(1);
-}
-
-// Hitung poin per komponen sesuai rumus baru (poin = nilai_mentah × bobot)
-// PBB & Danton PBB dibagi 2 (rata-rata 2 juri), VarFor & Danton VF tidak dibagi
-function poinPbb60(p: RekapNilaiPeserta): number {
-  return (p.nilai_pbb_total / 2) * 0.6;
-}
-function poinPbb65(p: RekapNilaiPeserta): number {
-  return (p.nilai_pbb_total / 2) * 0.65;
-}
-function poinVarfor30(p: RekapNilaiPeserta): number {
-  return p.nilai_varfor_total * 0.3;
-}
-function poinVarfor25(p: RekapNilaiPeserta): number {
-  return p.nilai_varfor_total * 0.25;
-}
-function poinDantonUmum(p: RekapNilaiPeserta): number {
-  // Danton PBB rata-rata 2 juri + Danton VarFor (juri 3 langsung), × 5%
-  const dantonPbbAvg = p.nilai_danton_pbb_total / 2;
-  return (dantonPbbAvg + p.nilai_danton_varfor_total) * 0.05;
-}
-function poinDantonPbb5(p: RekapNilaiPeserta): number {
-  return (p.nilai_danton_pbb_total / 2) * 0.05;
-}
-function poinDantonVf5(p: RekapNilaiPeserta): number {
-  return p.nilai_danton_varfor_total * 0.05;
-}
-function poinVoting5(p: RekapNilaiPeserta): number {
-  // Voting tetap pakai persen (skala 0-100) karena tidak ada nilai mentah seragam
-  return p.persen_voting * 0.05;
-}
-function skorJuaraUmumPoin(p: RekapNilaiPeserta): number {
-  return poinPbb60(p) + poinVarfor30(p) + poinDantonUmum(p) + poinVoting5(p);
-}
-function skorJuaraUtamaPoin(p: RekapNilaiPeserta): number {
-  return poinPbb65(p) + poinVarfor25(p) + poinDantonPbb5(p) + poinDantonVf5(p);
+function toPoint(n: number | null | undefined): string {
+  return n == null ? '—' : n.toFixed(2);
 }
 
 export default function PeringkatTab({
@@ -177,16 +142,16 @@ export default function PeringkatTab({
                 {kategori === 'umum' && (
                   <>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      PBB 60%
+                      PBB (600 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      VarFor 30%
+                      VarFor (300 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      Danton 5%
+                      Danpas (50 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      Voting 5%
+                      Voting (50 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-bold text-blue-700">SKOR</th>
                   </>
@@ -194,16 +159,16 @@ export default function PeringkatTab({
                 {kategori === 'utama' && (
                   <>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      PBB 65%
+                      PBB (650 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      VarFor 25%
+                      VarFor (250 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      Dnt PBB 5%
+                      Danpas PBB (50 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-slate-600">
-                      Dnt VF 5%
+                      Danpas VF (50 pt)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-bold text-blue-700">SKOR</th>
                   </>
@@ -247,8 +212,11 @@ export default function PeringkatTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {sorted.map((p, i) => (
-                <tr key={p.peserta_id} className={i < 3 ? 'bg-amber-50/40' : ''}>
+              {sorted.map((p, i) => {
+                const skor = computeLobbRankings(p);
+                const hasilAktif = kategori === 'umum' ? skor.umum : skor.utama;
+                return (
+                  <tr key={p.peserta_id} className={i < 3 ? 'bg-amber-50/40' : ''}>
                   <td className="px-3 py-3">
                     <RankBadge rank={i + 1} />
                   </td>
@@ -266,30 +234,51 @@ export default function PeringkatTab({
 
                   {kategori === 'umum' && (
                     <>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinPbb60(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor30(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonUmum(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVoting5(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.umum.components.pbb)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.umum.components.varfor)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.umum.components.danpas)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.umum.components.voting)}
+                      </td>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {toPoint(skorJuaraUmumPoin(p))}
+                        {hasilAktif.total === null ? 'Belum Lengkap' : toPoint(hasilAktif.total)}
+                        {hasilAktif.total !== null && p.total_penalti_poin > 0 && (
+                          <div className="text-[10px] font-normal text-red-500">
+                            Pengurangan {toPoint(p.total_penalti_poin)} poin
+                          </div>
+                        )}
                       </td>
                     </>
                   )}
 
                   {kategori === 'utama' && (
                     <>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinPbb65(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinVarfor25(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonPbb5(p))}</td>
-                      <td className="px-3 py-3 text-right font-mono text-sm">{toPoint(poinDantonVf5(p))}</td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.utama.components.pbb)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.utama.components.varfor)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.utama.components.danpasPbb)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-sm">
+                        {toPoint(skor.utama.components.danpasVarfor)}
+                      </td>
                       <td className="px-3 py-3 text-right font-mono">
                         <div className="flex flex-col items-end">
                           <span className="text-base font-bold text-blue-700">
-                            {toPoint(p.skor_juara_utama_bersih)}
+                            {hasilAktif.total === null ? 'Belum Lengkap' : toPoint(hasilAktif.total)}
                           </span>
-                          {p.total_penalti_poin > 0 && (
+                          {hasilAktif.total !== null && p.total_penalti_poin > 0 && (
                             <span className="text-[10px] font-normal text-red-500">
-                              {toPoint(skorJuaraUtamaPoin(p))} − {toPoint(p.total_penalti_poin)}
+                              Pengurangan {toPoint(p.total_penalti_poin)} poin
                             </span>
                           )}
                         </div>
@@ -300,10 +289,14 @@ export default function PeringkatTab({
                   {kategori === 'pbb' && (
                     <>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {toPoint(p.nilai_pbb_total)}
+                        {p.juri1_submitted && p.juri2_submitted
+                          ? toPoint(p.nilai_pbb_total)
+                          : 'Belum Lengkap'}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
-                        {toPoint(p.nilai_gerakan_jalan)}
+                        {p.juri1_submitted && p.juri2_submitted
+                          ? toPoint(p.nilai_gerakan_jalan)
+                          : '—'}
                       </td>
                     </>
                   )}
@@ -311,10 +304,10 @@ export default function PeringkatTab({
                   {kategori === 'varfor' && (
                     <>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {toPoint(p.nilai_varfor_total)}
+                        {p.juri3_submitted ? toPoint(p.nilai_varfor_total) : 'Belum Lengkap'}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
-                        {toPoint(p.nilai_formasi_only)}
+                        {p.juri3_submitted ? toPoint(p.nilai_formasi_only) : '—'}
                       </td>
                     </>
                   )}
@@ -322,21 +315,24 @@ export default function PeringkatTab({
                   {kategori === 'danton' && (
                     <>
                       <td className="px-3 py-3 text-right font-mono text-sm">
-                        {toPoint(p.nilai_danton_pbb_total)}
+                        {isPenilaianLengkap(p) ? toPoint(p.nilai_danton_pbb_total) : '—'}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm">
-                        {toPoint(p.nilai_danton_varfor_total)}
+                        {isPenilaianLengkap(p) ? toPoint(p.nilai_danton_varfor_total) : '—'}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-base font-bold text-blue-700">
-                        {toPoint(p.nilai_danton_pbb_total + p.nilai_danton_varfor_total)}
+                        {isPenilaianLengkap(p)
+                          ? toPoint(p.nilai_danton_pbb_total + p.nilai_danton_varfor_total)
+                          : 'Belum Lengkap'}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm text-slate-600">
                         {formatWaktu(p.waktu_tampil_detik)}
                       </td>
                     </>
                   )}
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

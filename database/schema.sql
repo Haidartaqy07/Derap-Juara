@@ -64,6 +64,7 @@ CREATE TABLE public.peserta (
   nama_regu TEXT NOT NULL,
   nomor_urut INTEGER NOT NULL,
   waktu_tampil_detik INTEGER, -- diisi admin setelah tampil, untuk tie-breaker Danton
+  penalti_manual_poin NUMERIC NOT NULL DEFAULT 0 CHECK (penalti_manual_poin >= 0),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (event_id, nomor_urut)
 );
@@ -217,11 +218,11 @@ varfor_total AS (
   LEFT JOIN public.nilai_detail_varfor nd ON nd.penilaian_id = pv.id
   GROUP BY p.id, pv.is_submitted
 ),
--- Voting maksimal untuk normalisasi
-voting_max AS (
+-- Total voting event dipakai untuk menghitung proporsi suara
+voting_total AS (
   SELECT
     p.event_id,
-    NULLIF(MAX(COALESCE(v.voting_pasukan_favorit, 0)), 0) AS max_voting
+    NULLIF(SUM(COALESCE(v.voting_pasukan_favorit, 0)), 0) AS total_voting
   FROM public.peserta p
   LEFT JOIN public.voting v ON v.peserta_id = p.id
   GROUP BY p.event_id
@@ -244,46 +245,65 @@ SELECT
   COALESCE(pg.jalan_juri1, 0) + COALESCE(pg.jalan_juri2, 0) AS nilai_gerakan_jalan,
   COALESCE(vt.total_formasi_only, 0) AS nilai_formasi_only,
   COALESCE(v.voting_pasukan_favorit, 0) AS voting,
-  -- Konversi persentase (skala 0-100)
-  -- Maks PBB = 2000 (1000 dari juri1 + 1000 dari juri2)
-  -- Maks Danton PBB = 200 (100 + 100)
-  -- Maks VarFor = 916 (jumlah max indikator V1-V18)
-  -- Maks Danton VarFor = 102 (jumlah max indikator D1-D6)
-  ROUND(((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 2000.0) * 100, 2) AS persen_pbb,
-  ROUND(((COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 200.0) * 100, 2) AS persen_danton_pbb,
-  ROUND((COALESCE(vt.total_varfor, 0)::NUMERIC / 916.0) * 100, 2) AS persen_varfor,
-  ROUND((COALESCE(vt.total_danton_varfor, 0)::NUMERIC / 102.0) * 100, 2) AS persen_danton_varfor,
+  ROUND(((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 20.0), 2) AS persen_pbb,
+  ROUND(((COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 2.0), 2) AS persen_danton_pbb,
+  ROUND((COALESCE(vt.total_varfor, 0)::NUMERIC / 10.0), 2) AS persen_varfor,
+  ROUND((COALESCE(vt.total_danton_varfor, 0)::NUMERIC), 2) AS persen_danton_varfor,
   ROUND(
-    CASE
-      WHEN vm.max_voting IS NULL OR vm.max_voting = 0 THEN 0
-      ELSE (COALESCE(v.voting_pasukan_favorit, 0)::NUMERIC / vm.max_voting::NUMERIC) * 100
+    CASE WHEN tt.total_voting IS NULL THEN 0
+      ELSE COALESCE(v.voting_pasukan_favorit, 0)::NUMERIC / tt.total_voting * 100
     END, 2
   ) AS persen_voting,
-  -- SKOR JUARA UMUM: PBB 60% + VarFor 30% + Danton (rata2) 5% + Voting 5%
-  ROUND(
-    (((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 2000.0) * 100 * 0.60) +
-    ((COALESCE(vt.total_varfor, 0)::NUMERIC / 916.0) * 100 * 0.30) +
-    (((
-      ((COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 200.0) * 100 +
-      (COALESCE(vt.total_danton_varfor, 0)::NUMERIC / 102.0) * 100
-    ) / 2.0) * 0.05) +
-    (CASE
-      WHEN vm.max_voting IS NULL OR vm.max_voting = 0 THEN 0
-      ELSE (COALESCE(v.voting_pasukan_favorit, 0)::NUMERIC / vm.max_voting::NUMERIC) * 100
-    END * 0.05)
-  , 2) AS skor_juara_umum,
-  -- SKOR JUARA UTAMA-TERAKHIR: PBB 65% + VarFor 25% + Danton PBB 5% + Danton VarFor 5%
-  ROUND(
-    (((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 2000.0) * 100 * 0.65) +
-    ((COALESCE(vt.total_varfor, 0)::NUMERIC / 916.0) * 100 * 0.25) +
-    (((COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 200.0) * 100 * 0.05) +
-    ((COALESCE(vt.total_danton_varfor, 0)::NUMERIC / 102.0) * 100 * 0.05)
-  , 2) AS skor_juara_utama
+  CASE WHEN COALESCE(pg.juri1_submitted, FALSE)
+      AND COALESCE(pg.juri2_submitted, FALSE)
+      AND COALESCE(vt.varfor_submitted, FALSE)
+    THEN ROUND(
+      ((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 2.0) * 0.60
+      + COALESCE(vt.total_varfor, 0)::NUMERIC * 0.30
+      + ((COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 2.0
+        + COALESCE(vt.total_danton_varfor, 0)::NUMERIC) / 4.0
+      + CASE WHEN tt.total_voting IS NULL THEN 0
+        ELSE COALESCE(v.voting_pasukan_favorit, 0)::NUMERIC / tt.total_voting * 50
+      END
+      - (GREATEST(COALESCE(p.waktu_tampil_detik - e.batas_waktu_detik, 0), 0) * 2
+        + p.penalti_manual_poin), 2)
+    ELSE NULL
+  END AS skor_juara_umum,
+  CASE WHEN COALESCE(pg.juri1_submitted, FALSE)
+      AND COALESCE(pg.juri2_submitted, FALSE)
+      AND COALESCE(vt.varfor_submitted, FALSE)
+    THEN ROUND(
+      ((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 2.0) * 0.65
+      + COALESCE(vt.total_varfor, 0)::NUMERIC * 0.25
+      + (COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 4.0
+      + COALESCE(vt.total_danton_varfor, 0)::NUMERIC / 2.0, 3)
+    ELSE NULL
+  END AS skor_juara_utama,
+  CASE WHEN COALESCE(pg.juri1_submitted, FALSE)
+      AND COALESCE(pg.juri2_submitted, FALSE)
+      AND COALESCE(vt.varfor_submitted, FALSE)
+    THEN ROUND(
+      ((COALESCE(pg.pbb_juri1, 0) + COALESCE(pg.pbb_juri2, 0))::NUMERIC / 2.0) * 0.65
+      + COALESCE(vt.total_varfor, 0)::NUMERIC * 0.25
+      + (COALESCE(pg.danton_juri1, 0) + COALESCE(pg.danton_juri2, 0))::NUMERIC / 4.0
+      + COALESCE(vt.total_danton_varfor, 0)::NUMERIC / 2.0
+      - (GREATEST(COALESCE(p.waktu_tampil_detik - e.batas_waktu_detik, 0), 0) * 2
+        + p.penalti_manual_poin), 3)
+    ELSE NULL
+  END AS skor_juara_utama_bersih,
+  CASE WHEN tt.total_voting IS NULL THEN 0
+    ELSE COALESCE(v.voting_pasukan_favorit, 0)::NUMERIC / tt.total_voting
+  END AS voting_raw,
+  GREATEST(COALESCE(p.waktu_tampil_detik - e.batas_waktu_detik, 0), 0) * 2 AS penalti_waktu_poin,
+  p.penalti_manual_poin,
+  (GREATEST(COALESCE(p.waktu_tampil_detik - e.batas_waktu_detik, 0), 0) * 2
+    + p.penalti_manual_poin) AS total_penalti_poin
 FROM public.peserta p
 LEFT JOIN pbb_gabungan pg ON pg.peserta_id = p.id
 LEFT JOIN varfor_total vt ON vt.peserta_id = p.id
 LEFT JOIN public.voting v ON v.peserta_id = p.id
-LEFT JOIN voting_max vm ON vm.event_id = p.event_id;
+LEFT JOIN voting_total tt ON tt.event_id = p.event_id
+LEFT JOIN public.events e ON e.id = p.event_id;
 
 -- ============================================================================
 -- ROW LEVEL SECURITY (RLS)

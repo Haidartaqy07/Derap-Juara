@@ -58,8 +58,8 @@ function EditEventModal({
   onSave: (updated: Partial<Event>) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [namaEvent, setNamaEvent] = useState(event.nama_event);
-  const [tanggal, setTanggal] = useState(event.tanggal);
+  const [namaEvent, setNamaEvent] = useState(event.name);
+  const [tanggal, setTanggal] = useState(event.date);
   const [batasMenit, setBatasMenit] = useState(Math.floor(event.batas_waktu_detik / 60));
   const [status, setStatus] = useState<Event['status']>(event.status);
   const [saving, setSaving] = useState(false);
@@ -68,8 +68,8 @@ function EditEventModal({
     if (!namaEvent.trim() || !tanggal) return;
     setSaving(true);
     await onSave({
-      nama_event: namaEvent.trim(),
-      tanggal,
+      name: namaEvent.trim(),
+      date: tanggal,
       batas_waktu_detik: batasMenit * 60,
       status,
     });
@@ -210,10 +210,10 @@ export default function AdminEventsPage() {
     } = await supabase.auth.getUser();
 
     const { error } = await supabase.from('events').insert({
-      nama_event: namaEvent,
-      tanggal,
+      name: namaEvent,
+      date: tanggal,
       batas_waktu_detik: batasMenit * 60,
-      created_by: user?.id,
+      created_by: user?.id ?? null,
     });
 
     if (error) {
@@ -278,7 +278,7 @@ export default function AdminEventsPage() {
       {/* ── Modal Konfirmasi Hapus ── */}
       {deleteTarget && (
         <ConfirmDialog
-          title={`Hapus "${deleteTarget.nama_event}"?`}
+          title={`Hapus "${deleteTarget.name}"?`}
           message="Semua data terkait (peserta, penilaian, indikator, juri) akan ikut terhapus secara permanen. Aksi ini tidak bisa dibatalkan."
           confirmLabel={deleting ? 'Menghapus...' : 'Hapus Event'}
           danger
@@ -383,9 +383,9 @@ export default function AdminEventsPage() {
                     {event.status}
                   </span>
                 </div>
-                <h3 className="font-semibold text-slate-900">{event.nama_event}</h3>
+                <h3 className="font-semibold text-slate-900">{event.name}</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  {new Date(event.tanggal).toLocaleDateString('id-ID', {
+                  {new Date(event.date).toLocaleDateString('id-ID', {
                     weekday: 'long',
                     day: 'numeric',
                     month: 'long',

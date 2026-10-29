@@ -5,10 +5,8 @@ import { createClient } from '@/lib/supabase/client';
 import { Peserta } from '@/types';
 import { Vote, Save } from 'lucide-react';
 
-type PesertaWithVoting = Peserta & { voting?: number };
-
 export default function VotingTab({ eventId }: { eventId: string }) {
-  const [peserta, setPeserta] = useState<PesertaWithVoting[]>([]);
+  const [peserta, setPeserta] = useState<Peserta[]>([]);
   const [drafts, setDrafts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -19,24 +17,24 @@ export default function VotingTab({ eventId }: { eventId: string }) {
 
   async function load() {
     const supabase = createClient();
-    const { data: pst } = await supabase
-      .from('peserta')
+    const { data: pst, error } = await supabase
+      .from('participants')
       .select('*')
       .eq('event_id', eventId)
       .order('nomor_urut');
 
-    const { data: vt } = await supabase.from('voting').select('*');
+    if (error) {
+      alert('Gagal memuat peserta: ' + error.message);
+      setLoading(false);
+      return;
+    }
 
-    const combined = (pst || []).map((p) => {
-      const v = vt?.find((x) => x.peserta_id === p.id);
-      return { ...p, voting: v?.voting_pasukan_favorit ?? 0 };
-    });
-
+    const combined = pst ?? [];
     setPeserta(combined);
 
     const draftMap: Record<string, number> = {};
     combined.forEach((p) => {
-      draftMap[p.id] = p.voting ?? 0;
+      draftMap[p.id] = p.vote_count ?? 0;
     });
     setDrafts(draftMap);
     setLoading(false);
@@ -46,8 +44,9 @@ export default function VotingTab({ eventId }: { eventId: string }) {
     const supabase = createClient();
     const nilai = drafts[pesertaId] ?? 0;
     const { error } = await supabase
-      .from('voting')
-      .upsert({ peserta_id: pesertaId, voting_pasukan_favorit: nilai });
+      .from('participants')
+      .update({ vote_count: nilai })
+      .eq('id', pesertaId);
 
     if (error) {
       alert('Gagal: ' + error.message);
@@ -69,7 +68,8 @@ export default function VotingTab({ eventId }: { eventId: string }) {
             <p className="font-medium">Voting Pasukan Favorit</p>
             <p className="mt-1 text-blue-800">
               Input jumlah voting Instagram untuk masing-masing peserta. Nilai ini berkontribusi
-              5% pada Skor Juara Umum (dinormalisasi terhadap peserta dengan voting tertinggi).
+              hingga 50 poin pada Juara Umum, dihitung sebagai proporsi dari seluruh suara peserta
+              dalam event.
             </p>
           </div>
         </div>

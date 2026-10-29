@@ -29,7 +29,12 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isLogin = pathname === '/login';
-  const isPublic = isLogin || pathname.startsWith('/_next') || pathname.startsWith('/api/public');
+  const isPublic =
+    pathname === '/' ||
+    isLogin ||
+    pathname === '/api/auth/login' ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/public');
 
   // Belum login dan akses halaman privat → redirect ke login
   if (!user && !isPublic) {

@@ -19,6 +19,7 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
   const [eventName, setEventName] = useState('');
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [accessError, setAccessError] = useState('');
 
   useEffect(() => {
     load();
@@ -36,18 +37,41 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
       .select('role')
       .eq('id', user.id)
       .single();
-    const userRole = prof?.role as UserRole;
+    if (!prof || !['juri1', 'juri2', 'juri3'].includes(prof.role)) {
+      setAccessError('Akun ini tidak memiliki peran juri.');
+      setLoading(false);
+      return;
+    }
+    const userRole = prof.role as UserRole;
     setRole(userRole);
+
+    const { data: assignment, error: assignmentError } = await supabase
+      .from('event_judges')
+      .select('event_id')
+      .eq('event_id', id)
+      .eq('user_id', user.id)
+      .eq('tipe_juri', userRole)
+      .maybeSingle();
+    if (assignmentError) {
+      setAccessError('Gagal memeriksa penugasan juri: ' + assignmentError.message);
+      setLoading(false);
+      return;
+    }
+    if (!assignment) {
+      setAccessError('Anda tidak ditugaskan sebagai juri untuk event ini.');
+      setLoading(false);
+      return;
+    }
 
     const { data: ev } = await supabase
       .from('events')
-      .select('nama_event')
+      .select('name')
       .eq('id', id)
       .single();
-    setEventName(ev?.nama_event || '');
+    setEventName(ev?.name || '');
 
     const { data: pst } = await supabase
-      .from('peserta')
+      .from('participants')
       .select('*')
       .eq('event_id', id)
       .order('nomor_urut');
@@ -67,27 +91,28 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
 
     if (userRole === 'juri1' || userRole === 'juri2') {
       const { data: pen } = await supabase
-        .from('penilaian_pbb')
-        .select('peserta_id, is_submitted, is_locked')
-        .in('peserta_id', pesertaIds)
-        .eq('tipe_juri', userRole);
+        .from('pbb_submissions')
+        .select('participant_id, submitted')
+        .in('participant_id', pesertaIds)
+        .eq('juri_role', userRole);
       pen?.forEach((p) =>
-        statuses.set(p.peserta_id, {
+        statuses.set(p.participant_id, {
           hasData: true,
-          submitted: p.is_submitted,
-          locked: p.is_locked,
+          submitted: p.submitted,
+          locked: p.submitted,
         }),
       );
     } else if (userRole === 'juri3') {
       const { data: pen } = await supabase
-        .from('penilaian_varfor')
-        .select('peserta_id, is_submitted, is_locked')
-        .in('peserta_id', pesertaIds);
+        .from('variasi_submissions')
+        .select('participant_id, submitted')
+        .in('participant_id', pesertaIds)
+        .eq('juri_role', userRole);
       pen?.forEach((p) =>
-        statuses.set(p.peserta_id, {
+        statuses.set(p.participant_id, {
           hasData: true,
-          submitted: p.is_submitted,
-          locked: p.is_locked,
+          submitted: p.submitted,
+          locked: p.submitted,
         }),
       );
     }
@@ -107,6 +132,7 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
   }
 
   if (loading) return <p className="text-slate-600">Memuat...</p>;
+  if (accessError) return <p className="text-red-600">{accessError}</p>;
 
   return (
     <div className="space-y-4">

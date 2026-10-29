@@ -41,158 +41,148 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
   const [scoresData, setScoresData] = useState<ScoreData[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventName, setEventName] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
     const supabase = createClient();
+    try {
+      const [
+        { data: event, error: eventError },
+        { data: participants, error: participantsError },
+        { data: indikator, error: indikatorError },
+      ] = await Promise.all([
+        supabase.from('events').select('name').eq('id', eventId).single(),
+        supabase
+          .from('participants')
+          .select('id, nama_regu, nomor_urut')
+          .eq('event_id', eventId)
+          .order('nomor_urut'),
+        supabase
+          .from('indikator_pbb')
+          .select('id, urutan, kategori, nama_gerakan')
+          .eq('event_id', eventId),
+      ]);
+      if (eventError) throw eventError;
+      if (participantsError) throw participantsError;
+      if (indikatorError) throw indikatorError;
+      setEventName(event.name);
 
-    // Fetch event name
-    const { data: event } = await supabase
-      .from('events')
-      .select('nama_event')
-      .eq('id', eventId)
-      .single();
+      const participantIds = participants.map(({ id }) => id);
+      if (participantIds.length === 0) {
+        setRows([]);
+        setScoresData([]);
+        return;
+      }
 
-    if (event) setEventName(event.nama_event);
+      const [
+        { data: pbb, error: pbbError },
+        { data: varfor, error: varforError },
+      ] = await Promise.all([
+        supabase
+          .from('pbb_submissions')
+          .select('id, participant_id, juri_role, pbb_scores, danton_scores, submitted')
+          .in('participant_id', participantIds),
+        supabase
+          .from('variasi_submissions')
+          .select('id, participant_id, juri_role, scores, submitted')
+          .in('participant_id', participantIds),
+      ]);
+      if (pbbError) throw pbbError;
+      if (varforError) throw varforError;
 
-    const { data: peserta } = await supabase
-      .from('peserta')
-      .select('*')
-      .eq('event_id', eventId)
-      .order('nomor_urut');
+      const getPbb = (participantId: string, role: 'juri1' | 'juri2') =>
+        pbb.find((submission) => submission.participant_id === participantId && submission.juri_role === role);
+      const getVarfor = (participantId: string) =>
+        varfor.find((submission) => submission.participant_id === participantId && submission.juri_role === 'juri3');
+      const getScoreMap = (
+        raw: unknown,
+        category: 'pbb' | 'danton_pbb'
+      ): Record<string, number> => {
+        const entries = Array.isArray(raw)
+          ? (raw as Array<{ itemId?: number; value?: number }>)
+          : [];
+        return Object.fromEntries(
+          entries.flatMap((entry) => {
+            const item = indikator.find(
+              (candidate) => candidate.urutan === entry.itemId && candidate.kategori === category
+            );
+            return item && typeof entry.value === 'number' ? [[item.id, entry.value]] : [];
+          })
+        );
+      };
 
-    if (!peserta) {
-      setRows([]);
-      setScoresData([]);
+      const result: StatusRow[] = participants.map((participant) => {
+        const j1 = getPbb(participant.id, 'juri1');
+        const j2 = getPbb(participant.id, 'juri2');
+        const j3 = getVarfor(participant.id);
+        return {
+          peserta_id: participant.id,
+          nama_regu: participant.nama_regu,
+          nomor_urut: participant.nomor_urut,
+          juri1_id: j1?.id ?? null,
+          juri1_submitted: j1?.submitted ?? false,
+          juri1_locked: j1?.submitted ?? false,
+          juri2_id: j2?.id ?? null,
+          juri2_submitted: j2?.submitted ?? false,
+          juri2_locked: j2?.submitted ?? false,
+          juri3_id: j3?.id ?? null,
+          juri3_submitted: j3?.submitted ?? false,
+          juri3_locked: j3?.submitted ?? false,
+        };
+      });
+
+      const scores: ScoreData[] = participants.map((participant) => {
+        const j1 = getPbb(participant.id, 'juri1');
+        const j2 = getPbb(participant.id, 'juri2');
+        const j3 = getVarfor(participant.id);
+        const juri1_scores = getScoreMap(j1?.pbb_scores, 'pbb');
+        const juri2_scores = getScoreMap(j2?.pbb_scores, 'pbb');
+        const varforEntries = Array.isArray(j3?.scores)
+          ? (j3.scores as Array<{ itemId?: number; value?: number }>)
+          : [];
+        const juri3_scores = Object.fromEntries(
+          varforEntries.flatMap((entry) => {
+            const item = INDIKATOR_VARFOR.find((candidate) => candidate.urutan === entry.itemId);
+            return item && typeof entry.value === 'number' ? [[item.kode, entry.value]] : [];
+          })
+        );
+        return {
+          peserta_id: participant.id,
+          nama_regu: participant.nama_regu,
+          nomor_urut: participant.nomor_urut,
+          juri1_scores,
+          juri2_scores,
+          juri3_scores,
+          juri1_total: Object.values(juri1_scores).reduce((sum, score) => sum + score, 0),
+          juri2_total: Object.values(juri2_scores).reduce((sum, score) => sum + score, 0),
+          juri3_total: Object.values(juri3_scores).reduce((sum, score) => sum + score, 0),
+        };
+      });
+
+      setRows(result);
+      setScoresData(scores);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Gagal memuat penilaian.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const pesertaIds = peserta.map((p) => p.id);
-
-    const { data: pbb } = await supabase
-      .from('penilaian_pbb')
-      .select('*')
-      .in('peserta_id', pesertaIds);
-
-    const { data: varfor } = await supabase
-      .from('penilaian_varfor')
-      .select('*')
-      .in('peserta_id', pesertaIds);
-
-    // Fetch detail scores
-    const { data: pbbDetails } = await supabase
-      .from('nilai_detail_pbb')
-      .select('*')
-      .in('penilaian_id', pbb?.map((p) => p.id) || []);
-
-    const { data: varforDetails } = await supabase
-      .from('nilai_detail_varfor')
-      .select('*')
-      .in('penilaian_id', varfor?.map((p) => p.id) || []);
-
-    // Fetch indikators for labels
-    const { data: indikators } = await supabase
-      .from('indikator_pbb')
-      .select('*')
-      .eq('event_id', eventId);
-
-    const result: StatusRow[] = peserta.map((p) => {
-      const j1 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri1');
-      const j2 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri2');
-      const j3 = varfor?.find((x) => x.peserta_id === p.id);
-      return {
-        peserta_id: p.id,
-        nama_regu: p.nama_regu,
-        nomor_urut: p.nomor_urut,
-        juri1_id: j1?.id ?? null,
-        juri1_submitted: j1?.is_submitted ?? false,
-        juri1_locked: j1?.is_locked ?? false,
-        juri2_id: j2?.id ?? null,
-        juri2_submitted: j2?.is_submitted ?? false,
-        juri2_locked: j2?.is_locked ?? false,
-        juri3_id: j3?.id ?? null,
-        juri3_submitted: j3?.is_submitted ?? false,
-        juri3_locked: j3?.is_locked ?? false,
-      };
-    });
-
-    // Build scores data for export
-    const scores: ScoreData[] = peserta.map((p) => {
-      const j1 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri1');
-      const j2 = pbb?.find((x) => x.peserta_id === p.id && x.tipe_juri === 'juri2');
-      const j3 = varfor?.find((x) => x.peserta_id === p.id);
-
-      const juri1_scores: { [key: string]: number } = {};
-      const juri2_scores: { [key: string]: number } = {};
-      const juri3_scores: { [key: string]: number } = {};
-      let juri1_total = 0;
-      let juri2_total = 0;
-      let juri3_total = 0;
-
-      if (j1) {
-        pbbDetails?.forEach((d) => {
-          if (d.penilaian_id === j1.id) {
-            const indicator = indikators?.find((i) => i.id === d.indikator_id);
-            if (indicator) {
-              juri1_scores[indicator.id] = d.nilai;
-              juri1_total += d.nilai;
-            }
-          }
-        });
-      }
-
-      if (j2) {
-        pbbDetails?.forEach((d) => {
-          if (d.penilaian_id === j2.id) {
-            const indicator = indikators?.find((i) => i.id === d.indikator_id);
-            if (indicator) {
-              juri2_scores[indicator.id] = d.nilai;
-              juri2_total += d.nilai;
-            }
-          }
-        });
-      }
-
-      if (j3) {
-        varforDetails?.forEach((d) => {
-          if (d.penilaian_id === j3.id) {
-            juri3_scores[d.kode_indikator] = d.nilai;
-            juri3_total += d.nilai;
-          }
-        });
-      }
-
-      return {
-        peserta_id: p.id,
-        nama_regu: p.nama_regu,
-        nomor_urut: p.nomor_urut,
-        juri1_scores,
-        juri2_scores,
-        juri3_scores,
-        juri1_total,
-        juri2_total,
-        juri3_total,
-      };
-    });
-
-    setRows(result);
-    setScoresData(scores);
-    setLoading(false);
   }, [eventId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  async function toggleLock(
-    table: 'penilaian_pbb' | 'penilaian_varfor',
-    id: string,
-    currentLocked: boolean
-  ) {
+  async function toggleLock(table: 'pbb_submissions' | 'variasi_submissions', id: string, currentLocked: boolean) {
     if (currentLocked && !confirm('Buka kunci penilaian? Juri akan bisa edit nilainya kembali.')) return;
 
     const supabase = createClient();
-    const { error } = await supabase.from(table).update({ is_locked: !currentLocked }).eq('id', id);
+    const submitted = !currentLocked;
+    const { error } = await supabase
+      .from(table)
+      .update({ submitted, submitted_at: submitted ? new Date().toISOString() : null })
+      .eq('id', id);
 
     if (error) alert('Gagal: ' + error.message);
     await load();
@@ -698,6 +688,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
   }
 
   if (loading) return <p className="text-slate-600">Memuat...</p>;
+  if (loadError) return <p className="text-red-600">Gagal memuat penilaian: {loadError}</p>;
 
   return (
     <div className="space-y-4">
@@ -760,7 +751,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
                     locked={r.juri1_locked}
                     onToggle={
                       r.juri1_id
-                        ? () => toggleLock('penilaian_pbb', r.juri1_id!, r.juri1_locked)
+                        ? () => toggleLock('pbb_submissions', r.juri1_id!, r.juri1_locked)
                         : undefined
                     }
                   />
@@ -769,7 +760,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
                     locked={r.juri2_locked}
                     onToggle={
                       r.juri2_id
-                        ? () => toggleLock('penilaian_pbb', r.juri2_id!, r.juri2_locked)
+                        ? () => toggleLock('pbb_submissions', r.juri2_id!, r.juri2_locked)
                         : undefined
                     }
                   />
@@ -778,7 +769,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
                     locked={r.juri3_locked}
                     onToggle={
                       r.juri3_id
-                        ? () => toggleLock('penilaian_varfor', r.juri3_id!, r.juri3_locked)
+                        ? () => toggleLock('variasi_submissions', r.juri3_id!, r.juri3_locked)
                         : undefined
                     }
                   />

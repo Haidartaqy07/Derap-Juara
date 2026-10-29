@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,19 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { data: profile, error: authorizationError } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    if (authorizationError || profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
+    }
+
     // Ambil semua profiles
     const { data: profiles, error: profileError } = await supabaseAdmin
       .from('profiles')

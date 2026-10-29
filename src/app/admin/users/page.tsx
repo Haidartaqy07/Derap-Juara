@@ -6,25 +6,26 @@ import { Pencil, Trash2, X, Check, KeyRound } from 'lucide-react';
 
 type ProfileWithEmail = Profile & { email: string };
 
-type Role = 'admin' | 'juri_1' | 'juri_2' | 'juri_3';
+type Role = 'admin' | 'juri1' | 'juri2' | 'juri3';
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-700',
-  juri_1: 'bg-blue-100 text-blue-700',
-  juri_2: 'bg-teal-100 text-teal-700',
-  juri_3: 'bg-orange-100 text-orange-700',
+  juri1: 'bg-blue-100 text-blue-700',
+  juri2: 'bg-teal-100 text-teal-700',
+  juri3: 'bg-orange-100 text-orange-700',
 };
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<ProfileWithEmail[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editUsername, setEditUsername] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
-  const [editRole, setEditRole] = useState<Role>('juri_1');
+  const [editRole, setEditRole] = useState<Role>('juri1');
   const [saving, setSaving] = useState(false);
 
   // Delete state
@@ -36,10 +37,17 @@ export default function AdminUsersPage() {
 
   async function load() {
     setLoading(true);
-    const res = await fetch('/api/admin/get-users');
-    const result = await res.json();
-    setUsers(result.users || []);
-    setLoading(false);
+    setLoadError('');
+    try {
+      const res = await fetch('/api/admin/get-users');
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Gagal memuat user.');
+      setUsers(result.users ?? []);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Gagal memuat user.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   function startEdit(u: ProfileWithEmail) {
@@ -47,7 +55,7 @@ export default function AdminUsersPage() {
     setEditUsername(u.username);
     setEditEmail('');
     setEditPassword('');
-    setEditRole((u.role as Role) ?? 'juri_1');
+    setEditRole((u.role as Role) ?? 'juri1');
   }
 
   function cancelEdit() {
@@ -55,7 +63,7 @@ export default function AdminUsersPage() {
     setEditUsername('');
     setEditEmail('');
     setEditPassword('');
-    setEditRole('juri_1');
+    setEditRole('juri1');
   }
 
   async function handleSaveEdit(u: ProfileWithEmail) {
@@ -109,6 +117,7 @@ export default function AdminUsersPage() {
   }
 
   if (loading) return <p className="text-slate-600">Memuat...</p>;
+  if (loadError) return <p className="text-red-600">Gagal memuat user: {loadError}</p>;
 
   return (
     <div className="space-y-4">
@@ -165,9 +174,9 @@ export default function AdminUsersPage() {
                             onChange={(e) => setEditRole(e.target.value as Role)}
                             className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                           >
-                            <option value="juri_1">Juri 1</option>
-                            <option value="juri_2">Juri 2</option>
-                            <option value="juri_3">Juri 3</option>
+                            <option value="juri1">Juri 1</option>
+                            <option value="juri2">Juri 2</option>
+                            <option value="juri3">Juri 3</option>
                             <option value="admin">Admin</option>
                           </select>
                         </div>

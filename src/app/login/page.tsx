@@ -2,12 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Shield } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,33 +16,26 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const result: { role?: string; error?: string } = await response.json();
 
-    if (signInError) {
-      setError('Email atau password salah');
+      if (!response.ok || !result.role) {
+        setError(result.error || 'Username atau password salah');
+        return;
+      }
+
+      router.push(result.role === 'admin' ? '/admin' : '/juri');
+      router.refresh();
+    } catch {
+      setError('Tidak dapat terhubung. Periksa koneksi lalu coba lagi.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Ambil role dari profile
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      setError('User tidak ditemukan');
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    router.push(profile?.role === 'admin' ? '/admin' : '/juri');
-    router.refresh();
   }
 
   return (
@@ -59,14 +51,15 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Username</label>
             <input
-              type="email"
+              type="text"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              placeholder="admin@paskibra.local"
+              placeholder="Masukkan username"
             />
           </div>
 
@@ -75,6 +68,7 @@ export default function LoginPage() {
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -91,7 +85,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
-            {loading ? 'Memproses...' : 'Login'}
+            {loading ? 'Memproses...' : 'Masuk'}
           </button>
         </form>
       </div>

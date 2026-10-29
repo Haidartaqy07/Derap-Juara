@@ -12,8 +12,10 @@ export interface Profile {
 
 export interface Event {
   id: string;
-  nama_event: string;
-  tanggal: string;
+  name: string;
+  date: string;
+  location: string | null;
+  active_movement_ids: number[];
   batas_waktu_detik: number;
   status: 'draft' | 'aktif' | 'selesai';
   created_by: string | null;
@@ -24,9 +26,9 @@ export interface Peserta {
   id: string;
   event_id: string;
   nama_regu: string;
-  nomor_urut: number | null;
+  nomor_urut: number;
   waktu_tampil_detik: number | null;
-  penalti_manual_poin: number;
+  vote_count: number;
 }
 
 export interface IndikatorPbb {
@@ -47,37 +49,32 @@ export interface IndikatorPbb {
   nilai_sb: number;
 }
 
-export interface PenilaianPbb {
+export interface SubmissionScore {
+  itemId: number;
+  value: number;
+}
+
+export interface PbbSubmission {
   id: string;
-  peserta_id: string;
-  juri_id: string;
-  tipe_juri: 'juri1' | 'juri2';
-  is_submitted: boolean;
-  is_locked: boolean;
+  participant_id: string;
+  event_id: string;
+  juri_role: 'juri1' | 'juri2';
+  pbb_scores: SubmissionScore[];
+  danton_scores: SubmissionScore[];
+  submitted: boolean;
   submitted_at: string | null;
   updated_at: string;
 }
 
-export interface PenilaianVarfor {
+export interface VariasiSubmission {
   id: string;
-  peserta_id: string;
-  juri_id: string;
-  is_submitted: boolean;
-  is_locked: boolean;
+  participant_id: string;
+  event_id: string;
+  juri_role: 'juri3';
+  scores: SubmissionScore[];
+  submitted: boolean;
   submitted_at: string | null;
   updated_at: string;
-}
-
-export interface NilaiDetailPbb {
-  penilaian_id: string;
-  indikator_id: string;
-  nilai: number;
-}
-
-export interface NilaiDetailVarfor {
-  penilaian_id: string;
-  kode_indikator: string;
-  nilai: number;
 }
 
 export interface RekapNilaiPeserta {
@@ -96,18 +93,19 @@ export interface RekapNilaiPeserta {
   nilai_gerakan_jalan: number;
   nilai_formasi_only: number;
   voting: number;
+  voting_raw: number;
   persen_pbb: number;
   persen_danton_pbb: number;
   persen_varfor: number;
   persen_danton_varfor: number;
   persen_voting: number;
-  skor_juara_umum: number;
-  skor_juara_utama: number;
+  skor_juara_umum: number | null;
+  skor_juara_utama: number | null;
   // Field penalti (skala poin)
   penalti_waktu_poin: number;
   penalti_manual_poin: number;
   total_penalti_poin: number;
-  skor_juara_utama_bersih: number;
+  skor_juara_utama_bersih: number | null;
 }
 
 // Struktur indikator Variasi Formasi (fixed, sama untuk semua event)
