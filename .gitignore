@@ -2,7 +2,13 @@ node_modules/
 .next/
 .env
 .env.local
-.env*.local
+.env*.localenovo@LAPTOP-6DI9TELI UCRT64 ~/Documents/derap-juara/derap-juara (main|REBASE 3/4)
+$ git push 
+fatal: You are not currently on a branch.
+To push the history leading to the current (detached HEAD)
+state now, use
+
+    git push origin HEAD:<name-of-remote-branch>
 *.log
 .DS_Store
 .vercel
