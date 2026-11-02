@@ -106,19 +106,24 @@ export default function JuriTab({ eventId }: { eventId: string }) {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setCreating(true);
-    const res = await fetch('/api/admin/create-judge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, username, tipeJuri, eventId }),
-    });
-    const result = await res.json();
-    if (!res.ok) {
-      alert('Gagal: ' + (result.error || 'Unknown error'));
-    } else {
-      closeForm();
-      await load();
+    try {
+      const res = await fetch('/api/admin/create-judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, username, tipeJuri, eventId }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert('Gagal: ' + (result.error || 'Unknown error'));
+      } else {
+        closeForm();
+        await load();
+      }
+    } catch {
+      alert('Tidak dapat membuat akun. Periksa koneksi lalu coba lagi.');
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   }
 
   // ── Klik nama juri → langsung tugaskan ──
@@ -224,8 +229,9 @@ export default function JuriTab({ eventId }: { eventId: string }) {
                     required
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="Nama tampilan"
+                    placeholder="Username untuk login"
                   />
                 </div>
                 <div>
@@ -245,13 +251,14 @@ export default function JuriTab({ eventId }: { eventId: string }) {
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">
-                    Email Login
+                    Email
                   </label>
                   <input
                     required
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     placeholder="juri1@paskibra.local"
                   />
@@ -260,10 +267,11 @@ export default function JuriTab({ eventId }: { eventId: string }) {
                   <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
                   <input
                     required
-                    type="text"
+                    type="password"
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     placeholder="Min 6 karakter"
                   />
