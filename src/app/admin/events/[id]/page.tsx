@@ -29,7 +29,7 @@ export default function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  // Next.js 15: params adalah Promise -> harus di-unwrap dengan React.use()
+  // Next.js 15: params adalah Promise -> harus di-unwrap dengan React.use(  )
   const { id } = use(params);
 
   const [event, setEvent] = useState<Event | null>(null);
