@@ -2,23 +2,33 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Peserta } from '@/types';
+import type { ParticipantCategory, Peserta } from '@/types';
 import { Plus, Save, Trash2 } from 'lucide-react';
 
 type PesertaAdmin = Peserta & { deduction_points: number };
 
-export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDetik?: number }) {
+export default function PesertaTab({
+  eventId,
+  categories,
+}: {
+  eventId: string;
+  categories: ParticipantCategory[];
+  batasWaktuDetik?: number;
+}) {
   const [peserta, setPeserta] = useState<PesertaAdmin[]>([]);
   const [loading, setLoading] = useState(true);
   const [namaRegu, setNamaRegu] = useState('');
+  const [newCategory, setNewCategory] = useState<ParticipantCategory>(categories[0] ?? 'U15');
   const [saving, setSaving] = useState(false);
-  const [drafts, setDrafts] = useState<Record<string, { nomor: string; deduction: string }>>({});
+  const [drafts, setDrafts] = useState<
+    Record<string, { nomor: string; deduction: string; category: ParticipantCategory }>
+  >({});
 
   const load = useCallback(async () => {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('participants')
-      .select('id, event_id, nama_regu, nomor_urut, vote_count, waktu_tampil_detik')
+      .select('id, event_id, nama_regu, nomor_urut, vote_count, waktu_tampil_detik, category')
       .eq('event_id', eventId)
       .order('nomor_urut');
 
@@ -57,6 +67,7 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
           {
             nomor: String(participant.nomor_urut),
             deduction: String(participant.deduction_points),
+            category: participant.category,
           },
         ])
       )
@@ -81,12 +92,14 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
       nama_regu: trimmedName,
       nomor_urut: nextNumber,
       vote_count: 0,
+      category: newCategory,
     });
 
     if (error) {
       alert('Gagal menambahkan peserta: ' + error.message);
     } else {
       setNamaRegu('');
+      setNewCategory(categories[0] ?? 'U15');
       await load();
     }
     setSaving(false);
@@ -113,6 +126,16 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
       return;
     }
 
+    const { error: categoryError } = await supabase
+      .from('participants')
+      .update({ category: draft.category })
+      .eq('id', participant.id);
+    if (categoryError) {
+      alert('Nomor urut tersimpan, tetapi kategori gagal disimpan: ' + categoryError.message);
+      setSaving(false);
+      return;
+    }
+
     const { error: deductionError } = await supabase.rpc('set_participant_deduction', {
       p_participant_id: participant.id,
       p_points: deduction,
@@ -133,7 +156,11 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
     setSaving(true);
     const supabase = createClient();
 
-    for (const table of ['deductions', 'pbb_submissions', 'variasi_submissions'] as const) {
+    for (const table of [
+      'deductions',
+      'pbb_submissions',
+      'variasi_submissions',
+    ] as const) {
       const { error } = await supabase.from(table).delete().eq('participant_id', participant.id);
       if (error) {
         alert(`Gagal menghapus data ${table}: ${error.message}`);
@@ -160,6 +187,18 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
           placeholder="Nama regu"
           className="min-w-60 flex-1 rounded-lg border border-slate-300 px-3 py-2"
         />
+        <select
+          value={newCategory}
+          onChange={(event) => setNewCategory(event.target.value as ParticipantCategory)}
+          className="rounded-lg border border-slate-300 px-3 py-2"
+          aria-label="Kategori peserta"
+        >
+          {categories.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
         <button
           disabled={saving}
           className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
@@ -175,6 +214,7 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Regu</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Nomor urut</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Kategori</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600">Pengurangan (poin)</th>
               <th className="px-4 py-3 text-right text-xs font-semibold text-slate-600">Aksi</th>
             </tr>
@@ -200,6 +240,27 @@ export default function PesertaTab({ eventId }: { eventId: string; batasWaktuDet
                     }
                     className="w-24 rounded-lg border border-slate-300 px-2 py-1.5"
                   />
+                </td>
+                <td className="px-4 py-3">
+                  <select
+                    value={drafts[participant.id]?.category ?? participant.category}
+                    onChange={(event) =>
+                      setDrafts((previous) => ({
+                        ...previous,
+                        [participant.id]: {
+                          ...previous[participant.id],
+                          category: event.target.value as ParticipantCategory,
+                        },
+                      }))
+                    }
+                    className="rounded-lg border border-slate-300 px-2 py-1.5"
+                  >
+                    {categories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
                 </td>
                 <td className="px-4 py-3">
                   <input

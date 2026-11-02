@@ -55,7 +55,7 @@ export default function AdminUsersPage() {
     setEditUsername(u.username);
     setEditEmail('');
     setEditPassword('');
-    setEditRole((u.role as Role) ?? 'juri1');
+    setEditRole(['admin', 'juri1', 'juri2', 'juri3'].includes(u.role) ? (u.role as Role) : 'juri1');
   }
 
   function cancelEdit() {

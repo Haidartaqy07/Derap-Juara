@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import PublicSiteShell from '@/components/public/public-site-shell';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
-      <body className="bg-slate-50 text-slate-900 antialiased">{children}</body>
+      <body className="bg-slate-50 text-slate-900 antialiased">
+        <PublicSiteShell>{children}</PublicSiteShell>
+      </body>
     </html>
   );
 }

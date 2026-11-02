@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Peserta } from '@/types';
 import { Vote, Save } from 'lucide-react';
@@ -10,9 +10,32 @@ export default function VotingTab({ eventId }: { eventId: string }) {
   const [drafts, setDrafts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const dirtyIds = useRef(new Set<string>());
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
 
   useEffect(() => {
     load();
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`admin-voting-${eventId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'participants',
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => {
+          void load();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [eventId]);
 
   async function load() {
@@ -34,7 +57,12 @@ export default function VotingTab({ eventId }: { eventId: string }) {
 
     const draftMap: Record<string, number> = {};
     combined.forEach((p) => {
-      draftMap[p.id] = p.vote_count ?? 0;
+      draftMap[p.id] = dirtyIds.current.has(p.id)
+        ? (draftsRef.current[p.id] ?? p.vote_count ?? 0)
+        : (p.vote_count ?? 0);
+    });
+    dirtyIds.current.forEach((id) => {
+      if (!combined.some((participant) => participant.id === id)) dirtyIds.current.delete(id);
     });
     setDrafts(draftMap);
     setLoading(false);
@@ -51,6 +79,7 @@ export default function VotingTab({ eventId }: { eventId: string }) {
     if (error) {
       alert('Gagal: ' + error.message);
     } else {
+      dirtyIds.current.delete(pesertaId);
       setSavedId(pesertaId);
       setTimeout(() => setSavedId(null), 1500);
       await load();
@@ -67,9 +96,9 @@ export default function VotingTab({ eventId }: { eventId: string }) {
           <div className="text-sm text-blue-900">
             <p className="font-medium">Voting Pasukan Favorit</p>
             <p className="mt-1 text-blue-800">
-              Input jumlah voting Instagram untuk masing-masing peserta. Nilai ini berkontribusi
-              hingga 50 poin pada Juara Umum, dihitung sebagai proporsi dari seluruh suara peserta
-              dalam event.
+              Pembayaran terverifikasi akan menambahkan suara ke jumlah peserta secara otomatis dan
+              tampil di sini. Perubahan suara diperbarui langsung; input manual tetap tersedia untuk
+              koreksi panitia. Voting tetap terpisah dari nilai lomba LDWC.
             </p>
           </div>
         </div>
@@ -83,6 +112,7 @@ export default function VotingTab({ eventId }: { eventId: string }) {
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
                 Nama Regu
               </th>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">Kategori</th>
               <th className="px-4 py-2 text-left text-xs font-semibold text-slate-600">
                 Jumlah Voting
               </th>
@@ -92,7 +122,7 @@ export default function VotingTab({ eventId }: { eventId: string }) {
           <tbody className="divide-y divide-slate-200">
             {peserta.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
                   Belum ada peserta
                 </td>
               </tr>
@@ -103,13 +133,18 @@ export default function VotingTab({ eventId }: { eventId: string }) {
                     #{p.nomor_urut}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-900">{p.nama_regu}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600">{p.category}</td>
                   <td className="px-4 py-3">
                     <input
                       type="number"
                       min={0}
+                      step={1}
                       value={drafts[p.id] ?? 0}
                       onChange={(e) =>
-                        setDrafts({ ...drafts, [p.id]: parseInt(e.target.value) || 0 })
+                        {
+                          dirtyIds.current.add(p.id);
+                          setDrafts({ ...drafts, [p.id]: parseInt(e.target.value) || 0 });
+                        }
                       }
                       className="w-32 rounded-lg border border-slate-300 px-3 py-1.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />

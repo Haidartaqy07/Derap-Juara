@@ -23,23 +23,30 @@ export default async function JuriLayout({ children }: { children: React.ReactNo
       ? 'Juri 1 — PBB'
       : profile?.role === 'juri2'
         ? 'Juri 2 — PBB'
-        : 'Juri 3 — Variasi Formasi';
+        : 'Juri 3 — Variasi & Formasi';
 
   return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-blue-950 text-white shadow-lg shadow-blue-950/10">
+        <div className="mx-auto flex min-h-[72px] max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
-            <Shield className="h-6 w-6 text-blue-600" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-blue-950 shadow-sm">
+              <Shield className="h-5 w-5" />
+            </span>
             <div>
-              <h1 className="text-sm font-bold leading-tight text-slate-900">{labelTipe}</h1>
-              <p className="text-xs text-slate-500">{profile?.username}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Derap Juara · Juri</p>
+              <h1 className="mt-0.5 text-sm font-bold leading-tight text-white sm:text-base">{labelTipe}</h1>
             </div>
           </div>
-          <LogoutButton />
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="hidden text-right text-xs font-medium text-blue-100 sm:block">
+              {profile?.username}
+            </span>
+            <LogoutButton variant="dark" />
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl p-4">{children}</main>
+      <main className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-6 lg:px-8">{children}</main>
     </div>
   );
 }

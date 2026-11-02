@@ -1,0 +1,325 @@
+{
+  "_catatan": "Fixture uji LOBB ANASHERA Part III 2026 (tingkat SMP). Nilai mentah dibaca dari sheet 'Nomor Urut N' (E35, M23, E46, I45, M25, M19). 'expected' = M33 (Umum) dan M41 (Utama). Toleransi uji: 0.01.",
+  "regu": [
+    {
+      "nomorUrut": 1,
+      "nama": "SMPN 3 BANJARBARU",
+      "raw": {
+        "pbb": 710.5,
+        "variasiFormasi": 535,
+        "danpasPbb": 72,
+        "danpasVarfor": 78,
+        "voting": 0.0046,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 624.53,
+        "juaraUtama": 670.575
+      }
+    },
+    {
+      "nomorUrut": 2,
+      "nama": "SMPN 21 BANJARMASIN (A)",
+      "raw": {
+        "pbb": 686.5,
+        "variasiFormasi": 475,
+        "danpasPbb": 61,
+        "danpasVarfor": 76,
+        "voting": 0.0098,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 589.14,
+        "juaraUtama": 633.475
+      }
+    },
+    {
+      "nomorUrut": 3,
+      "nama": "SMPN 24 BANJARMASIN",
+      "raw": {
+        "pbb": 683.5,
+        "variasiFormasi": 535,
+        "danpasPbb": 49,
+        "danpasVarfor": 74,
+        "voting": 0,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 601.35,
+        "juaraUtama": 639.525
+      }
+    },
+    {
+      "nomorUrut": 4,
+      "nama": "SMPN 33 BANJARMASIN",
+      "raw": {
+        "pbb": 659.5,
+        "variasiFormasi": 395,
+        "danpasPbb": 53,
+        "danpasVarfor": 70,
+        "voting": 0.0012,
+        "pengurangan": 500
+      },
+      "expected": {
+        "juaraUmum": 45.01,
+        "juaraUtama": 88.925
+      }
+    },
+    {
+      "nomorUrut": 5,
+      "nama": "SMPN 13 BANJARMASIN",
+      "raw": {
+        "pbb": 776.5,
+        "variasiFormasi": 615,
+        "danpasPbb": 73,
+        "danpasVarfor": 86,
+        "voting": 0.004,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 690.35,
+        "juaraUtama": 737.975
+      }
+    },
+    {
+      "nomorUrut": 6,
+      "nama": "SMPN 15 BANJARBARU",
+      "raw": {
+        "pbb": 803.5,
+        "variasiFormasi": 715,
+        "danpasPbb": 74,
+        "danpasVarfor": 86,
+        "voting": 0.2465,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 748.925,
+        "juaraUtama": 781.025
+      }
+    },
+    {
+      "nomorUrut": 7,
+      "nama": "SMPN 20 BANJARMASIN",
+      "raw": {
+        "pbb": 707.5,
+        "variasiFormasi": 510,
+        "danpasPbb": 62,
+        "danpasVarfor": 86,
+        "voting": 0,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 614.5,
+        "juaraUtama": 661.375
+      }
+    },
+    {
+      "nomorUrut": 8,
+      "nama": "SMPN 4 ALALAK",
+      "raw": {
+        "pbb": 571,
+        "variasiFormasi": 435,
+        "danpasPbb": 53,
+        "danpasVarfor": 70,
+        "voting": 0,
+        "pengurangan": 500
+      },
+      "expected": {
+        "juaraUmum": 3.85,
+        "juaraUtama": 41.4
+      }
+    },
+    {
+      "nomorUrut": 9,
+      "nama": "MTSN 2 BANJARMASIN",
+      "raw": {
+        "pbb": 817,
+        "variasiFormasi": 735,
+        "danpasPbb": 76,
+        "danpasVarfor": 86,
+        "voting": 0.0063,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 751.515,
+        "juaraUtama": 795.8
+      }
+    },
+    {
+      "nomorUrut": 10,
+      "nama": "SMPN 7 BANJARMASIN (A)",
+      "raw": {
+        "pbb": 793,
+        "variasiFormasi": 615,
+        "danpasPbb": 71,
+        "danpasVarfor": 80,
+        "voting": 0.0317,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 699.635,
+        "juaraUtama": 744.7
+      }
+    },
+    {
+      "nomorUrut": 11,
+      "nama": "SMPN 15 BANJARMASIN (B)",
+      "raw": {
+        "pbb": 701.5,
+        "variasiFormasi": 465,
+        "danpasPbb": 54,
+        "danpasVarfor": 70,
+        "voting": 0.0075,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 591.775,
+        "juaraUtama": 634.225
+      }
+    },
+    {
+      "nomorUrut": 12,
+      "nama": "SMPN 12 BANJARMASIN",
+      "raw": {
+        "pbb": 623.5,
+        "variasiFormasi": 430,
+        "danpasPbb": 53,
+        "danpasVarfor": 70,
+        "voting": 0.1653,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 542.115,
+        "juaraUtama": 574.275
+      }
+    },
+    {
+      "nomorUrut": 13,
+      "nama": "SMPN 7 BANJARMASIN (B)",
+      "raw": {
+        "pbb": 698.5,
+        "variasiFormasi": 575,
+        "danpasPbb": 60,
+        "danpasVarfor": 86,
+        "voting": 0.2235,
+        "pengurangan": 500
+      },
+      "expected": {
+        "juaraUmum": 139.275,
+        "juaraUtama": 170.775
+      }
+    },
+    {
+      "nomorUrut": 14,
+      "nama": "SMPN 2 BANJARMASIN",
+      "raw": {
+        "pbb": 836.5,
+        "variasiFormasi": 730,
+        "danpasPbb": 66,
+        "danpasVarfor": 88,
+        "voting": 0.0081,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 759.805,
+        "juaraUtama": 803.225
+      }
+    },
+    {
+      "nomorUrut": 15,
+      "nama": "SMPN 14 BANJARMASIN",
+      "raw": {
+        "pbb": 794.5,
+        "variasiFormasi": 605,
+        "danpasPbb": 73,
+        "danpasVarfor": 84,
+        "voting": 0.0023,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 697.565,
+        "juaraUtama": 746.175
+      }
+    },
+    {
+      "nomorUrut": 16,
+      "nama": "SMPN 11 BANJARBARU",
+      "raw": {
+        "pbb": 730,
+        "variasiFormasi": 565,
+        "danpasPbb": 71,
+        "danpasVarfor": 84,
+        "voting": 0.0323,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 647.865,
+        "juaraUtama": 693.25
+      }
+    },
+    {
+      "nomorUrut": 17,
+      "nama": "SMPN 15 BANJARMASIN (A)",
+      "raw": {
+        "pbb": 796,
+        "variasiFormasi": 710,
+        "danpasPbb": 73,
+        "danpasVarfor": 90,
+        "voting": 0.0795,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 735.325,
+        "juaraUtama": 776.4
+      }
+    },
+    {
+      "nomorUrut": 18,
+      "nama": "SMPN 3 GAMBUT",
+      "raw": {
+        "pbb": 772,
+        "variasiFormasi": 575,
+        "danpasPbb": 64,
+        "danpasVarfor": 70,
+        "voting": 0.0132,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 669.86,
+        "juaraUtama": 712.55
+      }
+    },
+    {
+      "nomorUrut": 19,
+      "nama": "SMPN 21 BANJARMASIN (B)",
+      "raw": {
+        "pbb": 704.5,
+        "variasiFormasi": 530,
+        "danpasPbb": 66,
+        "danpasVarfor": 66,
+        "voting": 0.1584,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 622.62,
+        "juaraUtama": 656.425
+      }
+    },
+    {
+      "nomorUrut": 20,
+      "nama": "MTS HIDAYATULLAH MARTAPURA",
+      "raw": {
+        "pbb": 782.5,
+        "variasiFormasi": 605,
+        "danpasPbb": 72,
+        "danpasVarfor": 86,
+        "voting": 0.0058,
+        "pengurangan": 0
+      },
+      "expected": {
+        "juaraUmum": 690.79,
+        "juaraUtama": 738.875
+      }
+    }
+  ]
+}

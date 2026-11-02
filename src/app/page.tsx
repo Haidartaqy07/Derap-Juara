@@ -12,14 +12,8 @@ import {
   Shield,
   ShieldCheck,
   Users,
+  Vote,
 } from 'lucide-react';
-
-const navigation = [
-  { label: 'Beranda', href: '#beranda' },
-  { label: 'Event', href: '#event' },
-  { label: 'Penilaian', href: '#penilaian' },
-  { label: 'Peringkat', href: '#peringkat' },
-];
 
 const steps = [
   {
@@ -40,7 +34,7 @@ const steps = [
     number: '03',
     icon: BarChart3,
     title: 'Pantau hasil',
-    description: 'Rekap dan peringkat dihitung setelah seluruh juri mengirim nilai.',
+    description: 'Pantau status submit dan subtotal; nilai akhir menunggu bobot resmi LDWC.',
     tone: 'bg-emerald-100 text-emerald-800',
   },
 ];
@@ -60,64 +54,24 @@ const workspaces = [
     eyebrow: 'PENILAIAN TERARAH',
     title: 'Setiap juri fokus pada bidangnya',
     description:
-      'Juri PBB dan Variasi Formasi mengisi nilai melalui halaman khusus dengan status submit yang jelas.',
+      'Juri PBB dan Variasi/Formasi mengisi nilai sesuai rubrik event.',
     accent: 'from-orange-500 to-amber-400',
-    details: ['PBB dan Danton PBB', 'Variasi Formasi dan Danton', 'Nilai tersimpan sebagai draft'],
+    details: ['PBB dan Danton PBB', 'Variasi, Formasi, Danton VarFor', 'Kategori usia'],
   },
   {
     icon: Medal,
     eyebrow: 'REKAPITULASI',
     title: 'Hasil lebih mudah dipantau',
     description:
-      'Lihat status penilaian, voting, pengurangan poin, dan peringkat peserta dari dashboard admin.',
+      'Lihat status penilaian dan subtotal mentah tanpa mengarang bobot nilai akhir.',
     accent: 'from-slate-800 to-slate-600',
-    details: ['Skor menunggu semua juri submit', 'Input voting dan pengurangan', 'Ekspor lembar penilaian'],
+    details: ['Status submit per juri', 'Subtotal tiap komponen LDWC', 'Ekspor subtotal CSV'],
   },
 ];
 
 export default function Home() {
   return (
     <main className="min-h-screen overflow-hidden bg-[#f7f8fc] text-slate-950">
-      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-[#f7f8fc]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8 lg:px-12">
-          <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Derap Juara, beranda">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-950 text-white shadow-md shadow-blue-950/15">
-              <Medal className="h-5 w-5" />
-            </span>
-            <span className="hidden text-sm font-black tracking-[0.12em] text-blue-950 sm:block">
-              DERAP JUARA
-            </span>
-          </Link>
-
-          <nav
-            aria-label="Navigasi utama"
-            className="order-3 flex w-full items-center justify-center gap-1 overflow-x-auto rounded-full border border-slate-200 bg-white p-1.5 shadow-sm sm:order-none sm:absolute sm:left-1/2 sm:w-auto sm:-translate-x-1/2"
-          >
-            {navigation.map((item, index) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className={`shrink-0 rounded-full px-3 py-2 text-xs font-bold transition sm:px-4 ${
-                  index === 0
-                    ? 'bg-blue-950 text-white shadow-sm'
-                    : 'text-slate-500 hover:bg-slate-100 hover:text-blue-950'
-                }`}
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
-
-          <Link
-            href="/login"
-            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-orange-500 px-4 py-2.5 text-xs font-extrabold text-white shadow-lg shadow-orange-500/20 transition hover:-translate-y-0.5 hover:bg-orange-600 sm:px-5 sm:text-sm"
-          >
-            Masuk
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </header>
-
       <section
         id="beranda"
         className="relative mx-auto grid min-h-[650px] max-w-7xl items-center gap-10 px-5 py-14 sm:px-8 md:py-20 lg:grid-cols-[0.92fr_1.08fr] lg:px-12"
@@ -149,10 +103,10 @@ export default function Home() {
               <ArrowRight className="h-4 w-4" />
             </Link>
             <a
-              href="#event"
+              href="/events"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3.5 text-sm font-extrabold text-slate-700 transition hover:border-blue-200 hover:text-blue-950"
             >
-              Jelajahi fitur
+              Lihat event
               <ArrowDown className="h-4 w-4" />
             </a>
           </div>
@@ -261,10 +215,10 @@ export default function Home() {
             </p>
           </div>
           <a
-            href="#penilaian"
+            href="/events"
             className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2.5 text-xs font-extrabold text-blue-950 shadow-md shadow-blue-950/5 transition hover:shadow-lg"
           >
-            Lihat alur kerja
+            Lihat semua event
             <ArrowRight className="h-4 w-4" />
           </a>
         </div>
@@ -363,13 +317,22 @@ export default function Home() {
               sesuai penugasan.
             </p>
           </div>
-          <Link
-            href="/login"
-            className="relative z-10 inline-flex shrink-0 items-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-orange-400"
-          >
-            Masuk ke aplikasi
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="relative z-10 flex flex-wrap gap-3">
+            <Link
+              href="/voting"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-orange-500 px-6 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-orange-400"
+            >
+              <Vote className="h-4 w-4" />
+              Dukung tim
+            </Link>
+            <Link
+              href="/login"
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/30 px-6 py-3.5 text-sm font-extrabold text-white transition hover:bg-white/10"
+            >
+              Masuk admin/juri
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
           <div className="pointer-events-none absolute right-0 h-64 w-64 rounded-full border border-white/10" />
         </div>
       </section>

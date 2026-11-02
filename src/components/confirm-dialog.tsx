@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -8,6 +10,7 @@ type DialogVariant = 'confirm' | 'success' | 'warning';
 type ConfirmDialogProps = {
   open: boolean;
   variant?: DialogVariant;
+  placement?: 'center' | 'bottom';
   title: string;
   message: string;
   confirmLabel?: string;
@@ -28,6 +31,7 @@ type ConfirmDialogProps = {
 export default function ConfirmDialog({
   open,
   variant = 'confirm',
+  placement = 'center',
   title,
   message,
   confirmLabel = 'Konfirmasi',
@@ -36,23 +40,39 @@ export default function ConfirmDialog({
   onCancel,
   loading = false,
 }: ConfirmDialogProps) {
-  if (!open) return null;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!open || !mounted) return null;
 
   const isSuccess = variant === 'success';
   const isWarning = variant === 'warning';
 
   const Icon = isSuccess ? CheckCircle2 : isWarning ? AlertTriangle : Info;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div
+      className={`fixed inset-0 z-[1000] flex justify-center p-4 ${
+        placement === 'bottom'
+          ? 'items-end pb-[calc(1rem+env(safe-area-inset-bottom))]'
+          : 'items-center'
+      }`}
+    >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        className="absolute inset-0 z-0 bg-slate-900/50 backdrop-blur-sm"
         onClick={!loading && onCancel ? onCancel : undefined}
       />
 
       {/* Kotak dialog */}
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative z-[1001] my-auto w-full max-w-md self-center overflow-hidden rounded-2xl bg-white shadow-2xl"
+      >
         {/* Tombol close (hanya kalau ada onCancel & tidak loading) */}
         {onCancel && !loading && (
           <button
@@ -116,6 +136,7 @@ export default function ConfirmDialog({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

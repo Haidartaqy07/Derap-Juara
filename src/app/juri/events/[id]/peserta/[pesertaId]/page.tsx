@@ -8,6 +8,7 @@ import { Peserta, UserRole } from '@/types';
 import { ArrowLeft, Lock } from 'lucide-react';
 import PenilaianPbbForm from '@/components/juri/penilaian-pbb-form';
 import PenilaianVarforForm from '@/components/juri/penilaian-varfor-form';
+import { LDWC_DEFAULT_RUBRIC, parseLdwcRubric, type LdwcRubric } from '@/lib/ldwc-rubric';
 
 export default function JuriPenilaianPage({
   params,
@@ -20,10 +21,12 @@ export default function JuriPenilaianPage({
   const router = useRouter();
   const [peserta, setPeserta] = useState<Peserta | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [rubric, setRubric] = useState<LdwcRubric>(LDWC_DEFAULT_RUBRIC);
   const [userId, setUserId] = useState<string | null>(null);
   const [penilaianId, setPenilaianId] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isDraftSubmitted, setIsDraftSubmitted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +59,29 @@ export default function JuriPenilaianPage({
     }
     const userRole = prof.role as UserRole;
     setRole(userRole);
+
+    const { data: event, error: eventError } = await supabase
+      .from('events')
+      .select('scoring_template, rubric')
+      .eq('id', eventId)
+      .single();
+    if (eventError || !event) {
+      setError(eventError?.message ?? 'Event tidak ditemukan.');
+      setLoading(false);
+      return;
+    }
+    if (event.scoring_template !== 'LDWC_2026') {
+      setError('Event ini memakai template Legacy dan tidak dapat dinilai menggunakan rubrik LDWC.');
+      setLoading(false);
+      return;
+    }
+    try {
+      setRubric(parseLdwcRubric(event.rubric ?? LDWC_DEFAULT_RUBRIC));
+    } catch (rubricError) {
+      setError(rubricError instanceof Error ? rubricError.message : 'Rubrik event tidak valid.');
+      setLoading(false);
+      return;
+    }
 
     // 2. Ambil data peserta
     const { data: pst, error: participantError } = await supabase
@@ -95,7 +121,7 @@ export default function JuriPenilaianPage({
       // Cek penilaian_pbb sudah ada?
       const { data: existing } = await supabase
         .from('pbb_submissions')
-        .select('id, submitted')
+        .select('id, submitted, draft_submitted_at')
         .eq('participant_id', pesertaId)
         .eq('juri_role', userRole)
         .maybeSingle();
@@ -104,6 +130,7 @@ export default function JuriPenilaianPage({
         setPenilaianId(existing.id);
         setIsSubmitted(existing.submitted);
         setIsLocked(existing.submitted);
+        setIsDraftSubmitted(Boolean(existing.draft_submitted_at));
       } else {
         const { data: created, error: createErr } = await supabase
           .from('pbb_submissions')
@@ -129,9 +156,10 @@ export default function JuriPenilaianPage({
         setPenilaianId(created.id);
       }
     } else if (userRole === 'juri3') {
+      const table = 'variasi_submissions';
       const { data: existing } = await supabase
-        .from('variasi_submissions')
-        .select('id, submitted')
+        .from(table)
+        .select('id, submitted, draft_submitted_at')
         .eq('participant_id', pesertaId)
         .eq('juri_role', userRole)
         .maybeSingle();
@@ -140,9 +168,10 @@ export default function JuriPenilaianPage({
         setPenilaianId(existing.id);
         setIsSubmitted(existing.submitted);
         setIsLocked(existing.submitted);
+        setIsDraftSubmitted(Boolean(existing.draft_submitted_at));
       } else {
         const { data: created, error: createErr } = await supabase
-          .from('variasi_submissions')
+          .from(table)
           .upsert(
             {
               participant_id: pesertaId,
@@ -189,35 +218,37 @@ export default function JuriPenilaianPage({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div>
         <Link
           href={`/juri/events/${eventId}`}
-          className="mb-2 inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900"
+          className="mb-3 inline-flex min-h-11 items-center gap-2 rounded-lg pr-3 text-sm font-semibold text-slate-600 transition hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
         >
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Daftar Peserta
         </Link>
-        <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 font-mono text-base font-bold text-slate-700">
+        <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-950 font-mono text-lg font-bold text-orange-200">
             #{peserta.nomor_urut}
           </span>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">{peserta.nama_regu}</h2>
-            <p className="text-sm text-slate-600">
-              {role === 'juri3' ? 'Penilaian Variasi Formasi' : 'Penilaian PBB'}
+          <div className="min-w-0">
+            <h2 className="text-lg font-black text-blue-950 sm:text-xl">{peserta.nama_regu}</h2>
+            <p className="mt-0.5 text-sm font-medium text-slate-600">
+              {role === 'juri3' ? 'Penilaian Variasi & Formasi' : 'Penilaian PBB'}
+              <span className="mx-2 text-slate-300">·</span>
+              {peserta.category}
             </p>
           </div>
         </div>
       </div>
 
       {isLocked && (
-        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
           <Lock className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
           <div className="text-sm text-amber-900">
             <p className="font-medium">Penilaian Terkunci</p>
             <p className="mt-1 text-amber-800">
-              Anda sudah submit nilai untuk peserta ini. Hubungi admin jika perlu revisi.
+              Admin sudah memfinalkan nilai untuk peserta ini. Hubungi admin jika perlu revisi.
             </p>
           </div>
         </div>
@@ -226,26 +257,22 @@ export default function JuriPenilaianPage({
       {(role === 'juri1' || role === 'juri2') && (
         <PenilaianPbbForm
           penilaianId={penilaianId}
-          eventId={eventId}
           isLocked={isLocked}
           isSubmitted={isSubmitted}
-          onSubmitted={() => {
-            setIsSubmitted(true);
-            setIsLocked(true);
-          }}
+          isDraftSubmitted={isDraftSubmitted}
+          onDraftSubmitted={() => setIsDraftSubmitted(true)}
+          rubric={rubric}
         />
       )}
 
       {role === 'juri3' && (
         <PenilaianVarforForm
           penilaianId={penilaianId}
-          eventId={eventId}
           isLocked={isLocked}
           isSubmitted={isSubmitted}
-          onSubmitted={() => {
-            setIsSubmitted(true);
-            setIsLocked(true);
-          }}
+          isDraftSubmitted={isDraftSubmitted}
+          onDraftSubmitted={() => setIsDraftSubmitted(true)}
+          rubric={rubric}
         />
       )}
     </div>

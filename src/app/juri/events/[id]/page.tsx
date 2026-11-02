@@ -4,12 +4,12 @@ import { useEffect, useState, use } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Peserta, UserRole } from '@/types';
-import { ArrowLeft, ArrowRight, CheckCircle2, Lock, Circle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 
 type PesertaWithStatus = Peserta & {
   has_data: boolean;
+  is_draft_submitted: boolean;
   is_submitted: boolean;
-  is_locked: boolean;
 };
 
 export default function JuriEventDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -63,12 +63,22 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
       return;
     }
 
-    const { data: ev } = await supabase
+    const { data: ev, error: eventError } = await supabase
       .from('events')
-      .select('name')
+      .select('name, scoring_template')
       .eq('id', id)
       .single();
+    if (eventError || !ev) {
+      setAccessError(eventError?.message ?? 'Event tidak ditemukan.');
+      setLoading(false);
+      return;
+    }
     setEventName(ev?.name || '');
+    if (ev.scoring_template !== 'LDWC_2026') {
+      setAccessError('Event ini memakai template Legacy. Admin perlu menyiapkan event LDWC sebelum penilaian dibuka.');
+      setLoading(false);
+      return;
+    }
 
     const { data: pst } = await supabase
       .from('participants')
@@ -86,33 +96,34 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
 
     // Status submit per peserta untuk juri ini
     // Catatan: record penilaian diidentifikasi pakai tipe_juri, bukan juri_id
-    let statuses: Map<string, { hasData: boolean; submitted: boolean; locked: boolean }> =
+    let statuses: Map<string, { hasData: boolean; draftSubmitted: boolean; submitted: boolean }> =
       new Map();
 
     if (userRole === 'juri1' || userRole === 'juri2') {
       const { data: pen } = await supabase
         .from('pbb_submissions')
-        .select('participant_id, submitted')
+        .select('participant_id, submitted, draft_submitted_at')
         .in('participant_id', pesertaIds)
         .eq('juri_role', userRole);
       pen?.forEach((p) =>
         statuses.set(p.participant_id, {
           hasData: true,
+          draftSubmitted: Boolean(p.draft_submitted_at),
           submitted: p.submitted,
-          locked: p.submitted,
         }),
       );
     } else if (userRole === 'juri3') {
+      const table = 'variasi_submissions';
       const { data: pen } = await supabase
-        .from('variasi_submissions')
-        .select('participant_id, submitted')
+        .from(table)
+        .select('participant_id, submitted, draft_submitted_at')
         .in('participant_id', pesertaIds)
         .eq('juri_role', userRole);
       pen?.forEach((p) =>
         statuses.set(p.participant_id, {
           hasData: true,
+          draftSubmitted: Boolean(p.draft_submitted_at),
           submitted: p.submitted,
-          locked: p.submitted,
         }),
       );
     }
@@ -122,8 +133,8 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
       return {
         ...p,
         has_data: s?.hasData ?? false,
+        is_draft_submitted: s?.draftSubmitted ?? false,
         is_submitted: s?.submitted ?? false,
-        is_locked: s?.locked ?? false,
       };
     });
 
@@ -131,25 +142,26 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
     setLoading(false);
   }
 
-  if (loading) return <p className="text-slate-600">Memuat...</p>;
-  if (accessError) return <p className="text-red-600">{accessError}</p>;
+  if (loading) return <p className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-600 shadow-sm">Memuat peserta...</p>;
+  if (accessError) return <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">{accessError}</p>;
 
   return (
-    <div className="space-y-4">
-      <div>
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <Link
           href="/juri"
-          className="mb-2 inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900"
+          className="mb-3 inline-flex min-h-11 items-center gap-2 rounded-lg pr-3 text-sm font-semibold text-slate-600 transition hover:text-orange-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
         >
           <ArrowLeft className="h-4 w-4" />
           Kembali ke Daftar Event
         </Link>
-        <h2 className="text-lg font-bold text-slate-900">{eventName}</h2>
-        <p className="text-sm text-slate-600">Pilih peserta untuk dinilai</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-600">Daftar penilaian</p>
+        <h2 className="mt-1 text-xl font-black text-blue-950 sm:text-2xl">{eventName}</h2>
+        <p className="mt-1 text-sm text-slate-600">Pilih peserta untuk membuka lembar penilaian.</p>
       </div>
 
       {peserta.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-600 shadow-sm">
           Belum ada peserta di event ini
         </div>
       ) : (
@@ -158,22 +170,25 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
             <Link
               key={p.id}
               href={`/juri/events/${id}/peserta/${p.id}`}
-              className="group flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 transition hover:border-blue-500"
+              className="group flex min-h-20 items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-orange-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 sm:p-5"
             >
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 font-mono text-sm font-bold text-slate-700">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-950 font-mono text-sm font-bold text-orange-200">
                   #{p.nomor_urut}
                 </span>
-                <div>
-                  <p className="font-semibold text-slate-900">{p.nama_regu}</p>
+                <div className="min-w-0">
+                  <p className="font-bold text-blue-950">{p.nama_regu}</p>
+                  <p className="text-xs text-slate-500">{p.category}</p>
                   <StatusBadge
                     hasData={p.has_data}
+                    draftSubmitted={p.is_draft_submitted}
                     submitted={p.is_submitted}
-                    locked={p.is_locked}
                   />
                 </div>
               </div>
-              <ArrowRight className="h-5 w-5 text-slate-400 group-hover:text-blue-600" />
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600 transition group-hover:bg-orange-500 group-hover:text-white">
+                <ArrowRight className="h-5 w-5" />
+              </span>
             </Link>
           ))}
         </div>
@@ -184,26 +199,26 @@ export default function JuriEventDetailPage({ params }: { params: Promise<{ id: 
 
 function StatusBadge({
   hasData,
+  draftSubmitted,
   submitted,
-  locked,
 }: {
   hasData: boolean;
+  draftSubmitted: boolean;
   submitted: boolean;
-  locked: boolean;
 }) {
-  if (locked) {
+  if (submitted) {
     return (
-      <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-        <Lock className="h-3 w-3" />
-        Terkunci
+      <span className="mt-1 inline-flex items-center gap-1 rounded-lg bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+        <CheckCircle2 className="h-3 w-3" />
+        Final oleh Admin · Terkunci
       </span>
     );
   }
-  if (submitted) {
+  if (draftSubmitted) {
     return (
-      <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+      <span className="mt-1 inline-flex items-center gap-1 rounded-lg bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-800">
         <CheckCircle2 className="h-3 w-3" />
-        Submitted
+        Draf dikirim
       </span>
     );
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import type { JudgeRole } from '@/types';
 import { UserPlus, Trash2, UserCheck, Search, X } from 'lucide-react';
 
 type JudgeWithProfile = {
@@ -20,8 +21,10 @@ type FormMode = 'create' | 'assign';
 const TIPE_LABEL: Record<string, string> = {
   juri1: 'Juri 1 (PBB)',
   juri2: 'Juri 2 (PBB)',
-  juri3: 'Juri 3 (Variasi Formasi)',
+  juri3: 'Juri 3 (Variasi & Formasi)',
 };
+
+const JUDGE_ROLES = ['juri1', 'juri2', 'juri3'] as const;
 
 export default function JuriTab({ eventId }: { eventId: string }) {
   const [judges, setJudges] = useState<JudgeWithProfile[]>([]);
@@ -33,13 +36,13 @@ export default function JuriTab({ eventId }: { eventId: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [tipeJuri, setTipeJuri] = useState<'juri1' | 'juri2' | 'juri3'>('juri1');
+  const [tipeJuri, setTipeJuri] = useState<(typeof JUDGE_ROLES)[number]>('juri1');
   const [creating, setCreating] = useState(false);
 
   // ── Form filter & tugaskan ──
   const [existingJuris, setExistingJuris] = useState<ExistingJuri[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
-  const [assignTipe, setAssignTipe] = useState<'juri1' | 'juri2' | 'juri3'>('juri1');
+  const [assignTipe, setAssignTipe] = useState<(typeof JUDGE_ROLES)[number]>('juri1');
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(false);
 
@@ -57,13 +60,13 @@ export default function JuriTab({ eventId }: { eventId: string }) {
     setLoading(false);
   }
 
-  async function loadExistingJuris(currentJudges: JudgeWithProfile[]) {
+  async function loadExistingJuris(currentJudges: JudgeWithProfile[], role: JudgeRole) {
     setLoadingExisting(true);
     const supabase = createClient();
     const { data } = await supabase
       .from('profiles')
       .select('id, username')
-      .in('role', ['juri1', 'juri2', 'juri3'])
+      .eq('role', role)
       .order('username');
 
     const assignedIds = new Set(currentJudges.map((j) => j.user_id));
@@ -71,10 +74,16 @@ export default function JuriTab({ eventId }: { eventId: string }) {
     setLoadingExisting(false);
   }
 
-  const tipeFilled = new Set(judges.map((j) => j.tipe_juri));
+  const tipeFilled = new Set(
+    judges
+      .map((judge) => judge.tipe_juri)
+      .filter((role): role is (typeof JUDGE_ROLES)[number] =>
+        JUDGE_ROLES.includes(role as (typeof JUDGE_ROLES)[number]),
+      ),
+  );
   const firstAvailableTipe =
-    (['juri1', 'juri2', 'juri3'] as const).find((t) => !tipeFilled.has(t)) ?? 'juri1';
-  const allTipeFilled = tipeFilled.size === 3;
+    JUDGE_ROLES.find((t) => !tipeFilled.has(t)) ?? 'juri1';
+  const allTipeFilled = tipeFilled.size === JUDGE_ROLES.length;
 
   function openForm(mode: FormMode) {
     setShowForm(true);
@@ -82,7 +91,7 @@ export default function JuriTab({ eventId }: { eventId: string }) {
     setTipeJuri(firstAvailableTipe);
     setAssignTipe(firstAvailableTipe);
     setFilterQuery('');
-    if (mode === 'assign') loadExistingJuris(judges);
+    if (mode === 'assign') loadExistingJuris(judges, firstAvailableTipe);
   }
 
   function closeForm() {
@@ -149,7 +158,8 @@ export default function JuriTab({ eventId }: { eventId: string }) {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-600">
-          Setiap event butuh 3 juri: Juri1 &amp; Juri2 (PBB), Juri3 (Variasi Formasi)
+          Slot aplikasi saat ini: Juri 1 &amp; 2 (PBB), Juri 3 (Variasi/Formasi).
+          Konfirmasi jumlah juri per komponen ke panitia sebelum event digunakan.
         </p>
         {!allTipeFilled && (
           <div className="flex items-center gap-2">
@@ -191,7 +201,7 @@ export default function JuriTab({ eventId }: { eventId: string }) {
               type="button"
               onClick={() => {
                 setFormMode('assign');
-                loadExistingJuris(judges);
+                loadExistingJuris(judges, assignTipe);
                 setFilterQuery('');
               }}
               className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${
@@ -223,10 +233,10 @@ export default function JuriTab({ eventId }: { eventId: string }) {
                   <select
                     required
                     value={tipeJuri}
-                    onChange={(e) => setTipeJuri(e.target.value as any)}
+                    onChange={(e) => setTipeJuri(e.target.value as JudgeRole)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                   >
-                    {(['juri1', 'juri2', 'juri3'] as const).map((t) => (
+                    {JUDGE_ROLES.map((t) => (
                       <option key={t} value={t} disabled={tipeFilled.has(t)}>
                         {TIPE_LABEL[t]} {tipeFilled.has(t) && '— sudah ada'}
                       </option>
@@ -287,19 +297,22 @@ export default function JuriTab({ eventId }: { eventId: string }) {
                   Tugaskan sebagai
                 </label>
                 <div className="flex gap-2">
-                  {(['juri1', 'juri2', 'juri3'] as const).map((t) => (
+                  {JUDGE_ROLES.map((t) => (
                     <button
                       key={t}
                       type="button"
                       disabled={tipeFilled.has(t)}
-                      onClick={() => setAssignTipe(t)}
+                      onClick={() => {
+                        setAssignTipe(t);
+                        void loadExistingJuris(judges, t);
+                      }}
                       className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         assignTipe === t
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-slate-300 text-slate-600 hover:bg-slate-50'
                       }`}
                     >
-                      {t === 'juri3' ? 'Juri 3' : t === 'juri1' ? 'Juri 1' : 'Juri 2'}
+                      {TIPE_LABEL[t]}
                       {tipeFilled.has(t) && (
                         <span className="ml-1 block text-xs font-normal text-slate-400">
                           (terisi)
@@ -375,8 +388,8 @@ export default function JuriTab({ eventId }: { eventId: string }) {
       )}
 
       {/* ── Kartu Slot Juri ── */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        {(['juri1', 'juri2', 'juri3'] as const).map((tipe) => {
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {JUDGE_ROLES.map((tipe) => {
           const j = judges.find((x) => x.tipe_juri === tipe);
           return (
             <div key={tipe} className="rounded-xl border border-slate-200 bg-white p-4">

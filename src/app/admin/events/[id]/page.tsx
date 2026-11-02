@@ -12,6 +12,7 @@ import {
   Vote,
   Lock,
   ClipboardList,
+  Award,
 } from 'lucide-react';
 import PesertaTab from '@/components/admin/peserta-tab';
 import JuriTab from '@/components/admin/juri-tab';
@@ -19,8 +20,9 @@ import PeringkatTab from '@/components/admin/peringkat-tab';
 import VotingTab from '@/components/admin/voting-tab';
 import KelolaPenilaianTab from '@/components/admin/kelola-penilaian-tab';
 import GerakanPbbTab from '@/components/admin/gerakan-pbb-tab';
+import ChampionshipAnnouncementTab from '@/components/admin/championship-announcement-tab';
 
-type Tab = 'peserta' | 'juri' | 'peringkat' | 'voting' | 'kelola' | 'gerakan';
+type Tab = 'peserta' | 'juri' | 'peringkat' | 'voting' | 'kelola' | 'gerakan' | 'juara';
 
 export default function EventDetailPage({
   params,
@@ -68,6 +70,10 @@ export default function EventDetailPage({
           })}{' '}
           • Batas waktu {Math.floor(event.batas_waktu_detik / 60)} menit
         </p>
+        <p className="mt-1 text-xs font-medium text-blue-700">
+          Template: {event.scoring_template === 'LEGACY' ? 'Legacy' : 'LDWC 2026'} · Kategori:{' '}
+          {event.categories?.join(' / ')}
+        </p>
       </div>
 
       <div className="border-b border-slate-200">
@@ -108,6 +114,12 @@ export default function EventDetailPage({
             icon={<Lock className="h-4 w-4" />}
             label="Kelola Penilaian"
           />
+          <TabBtn
+            active={tab === 'juara'}
+            onClick={() => setTab('juara')}
+            icon={<Award className="h-4 w-4" />}
+            label="Pengumuman Juara"
+          />
         </div>
       </div>
 
@@ -116,12 +128,19 @@ export default function EventDetailPage({
           <PeringkatTab eventId={id} batasWaktuDetik={event.batas_waktu_detik} />
         )}
         {tab === 'peserta' && (
-          <PesertaTab eventId={id} batasWaktuDetik={event.batas_waktu_detik} />
+          <PesertaTab
+            eventId={id}
+            categories={event.categories?.length ? event.categories : ['U15', 'U19']}
+            batasWaktuDetik={event.batas_waktu_detik}
+          />
         )}
         {tab === 'juri' && <JuriTab eventId={id} />}
-        {tab === 'gerakan' && <GerakanPbbTab eventId={id} />}
+        {tab === 'gerakan' && (
+          <GerakanPbbTab eventId={id} scoringTemplate={event.scoring_template} />
+        )}
         {tab === 'voting' && <VotingTab eventId={id} />}
         {tab === 'kelola' && <KelolaPenilaianTab eventId={id} />}
+        {tab === 'juara' && <ChampionshipAnnouncementTab eventId={id} />}
       </div>
     </div>
   );
