@@ -17,7 +17,8 @@ import {
   type SubmissionScore,
 } from '@/lib/scoring';
 import type { EventScoringTemplate, ParticipantCategory } from '@/types';
-import { CheckCircle2, Circle, RefreshCw } from 'lucide-react';
+import { ArrowDownToLine, CheckCircle2, Circle, FileText, RefreshCw, X } from 'lucide-react';
+import type { RubricItem } from '@/lib/ldwc-rubric';
 
 type Submission = {
   participant_id: string;
@@ -44,6 +45,13 @@ type ParticipantResult = {
     formasi: number | null;
     dantonVarfor: number | null;
   };
+  scoreEntries: {
+    pbb1: SubmissionScore[];
+    pbb2: SubmissionScore[];
+    dantonPbb1: SubmissionScore[];
+    dantonPbb2: SubmissionScore[];
+    varfor: SubmissionScore[];
+  };
   deduction: number;
 };
 
@@ -66,9 +74,16 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
   const [results, setResults] = useState<ParticipantResult[]>([]);
   const [template, setTemplate] = useState<EventScoringTemplate | null>(null);
   const [rubric, setRubric] = useState<LdwcRubric>(LDWC_DEFAULT_RUBRIC);
+  const [eventName, setEventName] = useState('');
+  const [eventDate, setEventDate] = useState('');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showPdfExport, setShowPdfExport] = useState(false);
+  const [pdfScope, setPdfScope] = useState<'all' | 'participant'>('all');
+  const [selectedParticipantId, setSelectedParticipantId] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState('');
 
   const loadResults = useCallback(async () => {
     setError('');
@@ -77,7 +92,7 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
       { data: event, error: eventError },
       { data: participants, error: participantsError },
     ] = await Promise.all([
-      supabase.from('events').select('scoring_template, rubric').eq('id', eventId).single(),
+      supabase.from('events').select('name, date, scoring_template, rubric').eq('id', eventId).single(),
       supabase
         .from('participants')
         .select('id, nama_regu, nomor_urut, category, vote_count')
@@ -92,6 +107,8 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
     }
 
     setTemplate(event.scoring_template);
+    setEventName(event.name);
+    setEventDate(event.date);
     let eventRubric: LdwcRubric;
     try {
       eventRubric = parseLdwcRubric(event.rubric ?? LDWC_DEFAULT_RUBRIC);
@@ -166,6 +183,10 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
         scoresFrom(j2?.danton_scores),
         j2?.submitted === true
       );
+      const pbb1Scores = scoresFrom(j1?.pbb_scores);
+      const pbb2Scores = scoresFrom(j2?.pbb_scores);
+      const dantonPbb1Scores = scoresFrom(j1?.danton_scores);
+      const dantonPbb2Scores = scoresFrom(j2?.danton_scores);
       const varforScores = scoresFrom(j3?.scores);
 
       return {
@@ -200,6 +221,13 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
             j3?.submitted === true
           ),
         },
+        scoreEntries: {
+          pbb1: pbb1Scores,
+          pbb2: pbb2Scores,
+          dantonPbb1: dantonPbb1Scores,
+          dantonPbb2: dantonPbb2Scores,
+          varfor: varforScores,
+        },
         deduction: deductionTotals.get(participant.id) ?? 0,
       };
     });
@@ -233,6 +261,284 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
   const isLdwc = template === 'LDWC_2026';
   const maximums = getLdwcMaximums(rubric);
 
+  async function exportScoresPdf() {
+    if (!isLdwc) return;
+    const selectedParticipant = results.find(({ id }) => id === selectedParticipantId);
+    if (pdfScope === 'participant' && !selectedParticipant) return;
+
+    setExportingPdf(true);
+    setPdfError('');
+    try {
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
+      const doc = new jsPDF({
+        orientation: pdfScope === 'all' ? 'landscape' : 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+
+      const addFooter = () => {
+        const pageCount = doc.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page += 1) {
+          doc.setPage(page);
+          doc.setFontSize(8);
+          doc.setTextColor(100, 116, 139);
+          doc.text(
+            `Derap Juara · ${eventName} · Halaman ${page}/${pageCount}`,
+            pageWidth - margin,
+            pageHeight - 6,
+            { align: 'right' }
+          );
+        }
+      };
+
+      doc.setTextColor(23, 37, 84);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(17);
+      doc.text('Laporan Nilai LDWC 2026', margin, 17);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(eventName, margin, 23);
+      doc.text(
+        `Tanggal event: ${eventDate ? new Date(`${eventDate}T00:00:00`).toLocaleDateString('id-ID') : '-'}`,
+        margin,
+        29
+      );
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        'Subtotal hanya ditampilkan setelah penilaian dikirim. Rincian per regu juga dapat memuat skor draf.',
+        margin,
+        34
+      );
+
+      if (pdfScope === 'all') {
+        autoTable(doc, {
+          startY: 39,
+          margin: { left: margin, right: margin, bottom: 12 },
+          head: [[
+            'No. / Regu',
+            'Kategori',
+            'Status juri',
+            'PBB J1',
+            'PBB J2',
+            'Danton PBB J1',
+            'Danton PBB J2',
+            'Variasi',
+            'Formasi',
+            'Danton V/F',
+            'Pengurangan',
+            'Voting',
+          ]],
+          body: results.map((participant) => [
+            `${participant.nomor_urut}. ${participant.nama_regu}`,
+            participant.category,
+            (['juri1', 'juri2', 'juri3'] as const)
+              .map((role, index) => `J${index + 1}: ${participant.submitted[role] ? 'Final' : 'Belum final'}`)
+              .join(' · '),
+            displayScore(participant.scores.pbb1, maximums.pbb, true),
+            displayScore(participant.scores.pbb2, maximums.pbb, true),
+            displayScore(participant.scores.dantonPbb1, maximums.dantonPbb, true),
+            displayScore(participant.scores.dantonPbb2, maximums.dantonPbb, true),
+            displayScore(participant.scores.variasi, maximums.variasi, true),
+            displayScore(participant.scores.formasi, maximums.formasi, true),
+            displayScore(participant.scores.dantonVarfor, maximums.dantonVarfor, true),
+            participant.deduction ? String(participant.deduction) : '-',
+            participant.vote_count ? String(participant.vote_count) : '-',
+          ]),
+          styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+          headStyles: { fillColor: [23, 37, 84], textColor: [255, 255, 255] },
+          alternateRowStyles: { fillColor: [247, 248, 252] },
+          columnStyles: { 0: { cellWidth: 29 }, 1: { cellWidth: 17 }, 2: { cellWidth: 35 } },
+          didDrawPage: () => {
+            doc.setFontSize(8);
+            doc.setTextColor(100, 116, 139);
+            doc.text(
+              'Pengurangan dan voting ditampilkan terpisah dari subtotal rubrik.',
+              margin,
+              pageHeight - 6
+            );
+          },
+        });
+      } else if (selectedParticipant) {
+        const participant = selectedParticipant;
+        const items = getLdwcItems(rubric);
+        const savedValues = (scores: SubmissionScore[]) =>
+          new Map(scores.map(({ itemId, value }) => [itemId, value]));
+        const scoreLabel = (item: RubricItem, value: number | undefined) => {
+          if (value === undefined) return '-';
+          const level = rubric.levelOrder.find((key) => item.levels[key] === value);
+          return level ? `${value} (${level})` : String(value);
+        };
+        let nextY = 49;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(23, 37, 84);
+        doc.text(
+          `Regu #${participant.nomor_urut} · ${participant.nama_regu} · ${participant.category}`,
+          margin,
+          42
+        );
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105);
+        doc.text(
+          `Status: J1 ${participant.submitted.juri1 ? 'final' : 'belum final'} · J2 ${participant.submitted.juri2 ? 'final' : 'belum final'} · J3 ${participant.submitted.juri3 ? 'final' : 'belum final'}`,
+          margin,
+          47
+        );
+
+        const scoreTable = (
+          title: string,
+          rubricItems: RubricItem[],
+          firstScores: SubmissionScore[],
+          firstTotal: number | null,
+          firstFinal: boolean,
+          firstHeader: string,
+          secondScores?: SubmissionScore[],
+          secondTotal?: number | null,
+          secondFinal?: boolean,
+          secondHeader?: string
+        ) => {
+          if (nextY > pageHeight - 20) {
+            doc.addPage();
+            nextY = margin;
+          }
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10);
+          doc.setTextColor(23, 37, 84);
+          doc.text(title, margin, nextY + 3);
+          nextY += 5;
+
+          const firstValues = savedValues(firstScores);
+          const secondValues = secondScores ? savedValues(secondScores) : undefined;
+          autoTable(doc, {
+            startY: nextY,
+            margin: { left: margin, right: margin, bottom: 12 },
+            head: [[
+              'Item',
+              'Indikator',
+              'Maks.',
+              firstHeader,
+              ...(secondValues ? [secondHeader ?? 'Juri 2'] : []),
+            ]],
+            body: rubricItems.map((item) => [
+              String(item.itemId),
+              item.name,
+              String(item.max),
+              scoreLabel(item, firstValues.get(item.itemId)),
+              ...(secondValues ? [scoreLabel(item, secondValues.get(item.itemId))] : []),
+            ]),
+            foot: [[
+              '',
+              `Subtotal ${title}`,
+              String(rubricItems.reduce((sum, item) => sum + item.max, 0)),
+              displayScore(firstTotal, rubricItems.reduce((sum, item) => sum + item.max, 0), firstFinal),
+              ...(secondValues
+                ? [
+                    displayScore(
+                      secondTotal ?? null,
+                      rubricItems.reduce((sum, item) => sum + item.max, 0),
+                      secondFinal === true
+                    ),
+                  ]
+                : []),
+            ]],
+            styles: { fontSize: 8, cellPadding: 2.2 },
+            headStyles: { fillColor: [23, 37, 84], textColor: [255, 255, 255] },
+            footStyles: { fillColor: [241, 245, 249], textColor: [23, 37, 84], fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [247, 248, 252] },
+            columnStyles: { 0: { cellWidth: 13 }, 2: { cellWidth: 17 } },
+          });
+          const tableDoc = doc as typeof doc & { lastAutoTable?: { finalY: number } };
+          nextY = (tableDoc.lastAutoTable?.finalY ?? nextY) + 8;
+        };
+
+        scoreTable(
+          'PBB',
+          items.pbb,
+          participant.scoreEntries.pbb1,
+          participant.scores.pbb1,
+          participant.submitted.juri1,
+          'Juri 1',
+          participant.scoreEntries.pbb2,
+          participant.scores.pbb2,
+          participant.submitted.juri2,
+          'Juri 2'
+        );
+        scoreTable(
+          'Danton PBB',
+          items.dantonPbb,
+          participant.scoreEntries.dantonPbb1,
+          participant.scores.dantonPbb1,
+          participant.submitted.juri1,
+          'Juri 1',
+          participant.scoreEntries.dantonPbb2,
+          participant.scores.dantonPbb2,
+          participant.submitted.juri2,
+          'Juri 2'
+        );
+        scoreTable(
+          'Variasi',
+          items.variasi,
+          participant.scoreEntries.varfor,
+          participant.scores.variasi,
+          participant.submitted.juri3,
+          'Juri 3'
+        );
+        scoreTable(
+          'Formasi',
+          items.formasi,
+          participant.scoreEntries.varfor,
+          participant.scores.formasi,
+          participant.submitted.juri3,
+          'Juri 3'
+        );
+        scoreTable(
+          'Danton Variasi/Formasi',
+          items.dantonVarfor,
+          participant.scoreEntries.varfor,
+          participant.scores.dantonVarfor,
+          participant.submitted.juri3,
+          'Juri 3'
+        );
+        autoTable(doc, {
+          startY: nextY,
+          margin: { left: margin, right: margin, bottom: 12 },
+          head: [['Data tambahan', 'Nilai']],
+          body: [
+            ['Pengurangan (terpisah dari subtotal)', participant.deduction ? String(participant.deduction) : '-'],
+            ['Voting (terpisah dari subtotal)', participant.vote_count ? String(participant.vote_count) : '-'],
+          ],
+          styles: { fontSize: 8, cellPadding: 2.2 },
+          headStyles: { fillColor: [23, 37, 84], textColor: [255, 255, 255] },
+        });
+      }
+
+      addFooter();
+      const fileSuffix = pdfScope === 'all'
+        ? 'semua-regu'
+        : `${selectedParticipant?.nomor_urut}-${selectedParticipant?.nama_regu ?? 'regu'}`;
+      const safeName = `${eventName}-nilai-${fileSuffix}`
+        .normalize('NFKD')
+        .replace(/[\\/:*?"<>|]+/g, '-')
+        .replace(/\s+/g, '-');
+      doc.save(`${safeName}.pdf`);
+      setShowPdfExport(false);
+    } catch (exportError) {
+      console.error('[admin/peringkat] gagal membuat PDF:', exportError);
+      setPdfError('Gagal membuat PDF. Silakan coba lagi.');
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   if (loading) return <p className="text-slate-600">Memuat subtotal...</p>;
   if (error) {
     return (
@@ -251,10 +557,98 @@ export default function PeringkatTab({ eventId }: { eventId: string; batasWaktuD
         <p className="text-xs text-slate-500">
           Live · diperbarui {lastUpdate.toLocaleTimeString('id-ID')}
         </p>
-        <button onClick={() => void loadResults()} className="rounded p-1 hover:bg-slate-100" aria-label="Refresh">
-          <RefreshCw className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedParticipantId(results[0]?.id ?? '');
+              setPdfError('');
+              setShowPdfExport((open) => !open);
+            }}
+            disabled={!isLdwc || results.length === 0 || exportingPdf}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FileText className="h-4 w-4" />
+            Ekspor PDF
+          </button>
+          <button
+            onClick={() => void loadResults()}
+            className="rounded p-1 hover:bg-slate-100"
+            aria-label="Refresh"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
       </div>
+      {showPdfExport && (
+        <section
+          aria-labelledby="pdf-export-title"
+          className="rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 id="pdf-export-title" className="font-bold text-blue-950">Ekspor nilai ke PDF</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Subtotal tersedia setelah penilaian dikirim. Rincian per regu juga dapat memuat skor draf.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPdfExport(false)}
+              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Tutup menu ekspor PDF"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto] sm:items-end">
+            <label className="block text-xs font-semibold text-slate-700">
+              Cakupan
+              <select
+                value={pdfScope}
+                onChange={(event) => {
+                  setPdfScope(event.target.value === 'participant' ? 'participant' : 'all');
+                  setPdfError('');
+                }}
+                className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">Semua regu</option>
+                <option value="participant">Satu regu</option>
+              </select>
+            </label>
+            {pdfScope === 'participant' && (
+              <label className="block text-xs font-semibold text-slate-700">
+                Pilih regu
+                <select
+                  value={selectedParticipantId}
+                  onChange={(event) => setSelectedParticipantId(event.target.value)}
+                  className="mt-1.5 min-h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                >
+                  {results.map((participant) => (
+                    <option key={participant.id} value={participant.id}>
+                      #{participant.nomor_urut} · {participant.nama_regu} ({participant.category})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={() => void exportScoresPdf()}
+              disabled={exportingPdf || (pdfScope === 'participant' && !selectedParticipantId)}
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-blue-950 transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ArrowDownToLine className="h-4 w-4" />
+              {exportingPdf ? 'Menyiapkan PDF...' : 'Unduh PDF'}
+            </button>
+          </div>
+          {pdfError && (
+            <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {pdfError}
+            </p>
+          )}
+        </section>
+      )}
       {template === 'LEGACY' ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           Event ini memakai template Legacy. Nilai lama tidak dihitung ulang menggunakan rubrik LDWC.
