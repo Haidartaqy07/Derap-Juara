@@ -346,7 +346,7 @@ export default function KelolaPenilaianTab({ eventId }: { eventId: string }) {
                           }
                           onUnlock={submission?.submitted ? () => void unlockSubmission(table, submission) : undefined}
                           onView={
-                            template === 'LDWC_2026' && submission
+                            template !== 'LEGACY' && submission
                               ? () => setReview({ participant, submission })
                               : undefined
                           }
@@ -400,7 +400,7 @@ function StatusCell({
             className="inline-flex min-h-8 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
           >
             <Eye className="h-3.5 w-3.5" />
-            Lihat nilai
+            Lihat detail nilai
           </button>
         )}
         <span className={`inline-flex items-center gap-1 text-xs ${submission.draft_submitted_at ? 'font-semibold text-orange-800' : 'text-slate-500'}`}>
@@ -431,7 +431,7 @@ function StatusCell({
           className="inline-flex min-h-8 items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
         >
           <Eye className="h-3.5 w-3.5" />
-          Lihat nilai
+          Lihat detail nilai
         </button>
       )}
       <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
