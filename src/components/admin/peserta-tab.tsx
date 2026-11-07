@@ -116,10 +116,10 @@ export default function PesertaTab({
 
     setSaving(true);
     const supabase = createClient();
-    const { error: numberError } = await supabase
-      .from('participants')
-      .update({ nomor_urut: nomor })
-      .eq('id', participant.id);
+    const { error: numberError } = await supabase.rpc('set_participant_number', {
+      p_participant_id: participant.id,
+      p_nomor_urut: nomor,
+    });
     if (numberError) {
       alert('Gagal menyimpan nomor urut: ' + numberError.message);
       setSaving(false);
@@ -313,8 +313,8 @@ export default function PesertaTab({
         </table>
       </div>
       <p className="text-xs text-slate-500">
-        Penalti waktu tidak tersedia pada skema database saat ini; pengurangan manual dicatat di
-        tabel deductions.
+        Jika nomor urut tujuan sudah dipakai, nomor kedua regu akan ditukar. Penalti waktu tidak tersedia
+        pada skema database saat ini; pengurangan manual dicatat di tabel deductions.
       </p>
     </div>
   );

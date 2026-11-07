@@ -88,6 +88,8 @@ seluruh migration secara berurutan pada database Supabase yang sudah memiliki sk
     dari snapshot rubrik LDWC dan bersihkan nilai tersimpan untuk indikator tersebut.
 11. `database/migrations/20261109_admin_unlock_finalized_submissions.sql` — izinkan admin membuka kunci nilai final
     sambil tetap mencegah juri mengubah nilai yang sudah difinalkan; mengganti trigger legacy yang menolak semua update.
+12. `database/migrations/20261110_swap_participant_numbers.sql` — simpan perubahan nomor urut secara atomik dan tukar
+    nomor dengan peserta lain di event yang sama jika nomor tujuan sudah digunakan.
 
 Cadangkan database dan baca peringatan di header bundel sebelum menjalankan. Bundel tidak membuat
 database kosong. Jangan jalankan seluruh bundel jika migration individual sudah pernah diterapkan.
