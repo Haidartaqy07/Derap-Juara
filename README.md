@@ -209,8 +209,9 @@ Tab **Pengumuman Juara** pada detail event admin menampilkan pratinjau hasil ber
 difinalkan. Admin dapat mengumumkan seluruh kategori sekaligus; hasil publik tampil di menu **Pengumuman**
 dan memuat detail subtotal serta kontribusi rumus untuk Juara Bergilir, Juara Utama I–III, Juara Harapan
 I–III, Juara Madya I–III, Juara Bina I–III, Juara Mula I–III, Juara Purwa I–III, Juara Caraka I–III,
-Juara Potensial I–III, Juara Perintis I–III, Juara Siaga I–III, Juara Umum, PBB Terbaik, Juara Danton,
-dan Juara Variasi. Pengumuman dapat diperbarui dengan tombol **Umumkan Ulang**.
+Juara Potensial I–III, Juara Perintis I–III, Juara Siaga I–III, Juara Pemula I–III, Juara Pelajar I–II,
+Juara Umum, PBB Terbaik I–III, Danton Terbaik I–III, dan Variasi Terbaik I–III. Pengumuman dapat
+diperbarui dengan tombol **Umumkan Ulang**.
 
 Perhitungan dipisahkan untuk U15 dan U19. Juara Bergilir memakai regu peringkat tertinggi. Juara Utama,
 Harapan, Madya, Bina, Mula, Purwa, Caraka, Potensial, Perintis, dan Siaga masing-masing menggunakan
@@ -218,10 +219,13 @@ rumus PBB 60%, Danton PBB 5%, Variasi+Formasi 30%, dan Danton Variasi/Formasi 5%
 tiga peringkat berurutan. Juara Utama memakai tiga peringkat pertama, Harapan tiga berikutnya, dan
 seterusnya sampai Siaga (peringkat 28–30).
 Juara Umum memakai PBB 50%, Variasi+Formasi 30%, Danton PBB 10%, dan voting 10%; poin voting dinormalisasi
-terhadap suara tertinggi dalam kategori. PBB dan Danton PBB menggunakan rata-rata dua juri. Juara Danton
-menggunakan subtotal Danton PBB; Juara Variasi memakai gabungan Variasi+Formasi, dengan Formasi sebagai
-tie-break. Seluruh subtotal dinormalisasi terhadap maksimum rubrik event. Pengumuman diblokir apabila nilai
-belum lengkap/difinalkan atau skor untuk posisi pemenang Juara Utama sampai Siaga maupun Juara Umum seri. Jika
+terhadap suara tertinggi dalam kategori. Juara Pemula I–III dan Juara Pelajar I–II memakai rumus Juara Utama
+dan dihitung dari regu dalam kategori U15/U19. PBB Terbaik dan Danton Terbaik memakai rata-rata skor masing-masing
+dari dua juri; Variasi Terbaik memakai gabungan Variasi+Formasi, dengan Formasi sebagai tie-break. Penghargaan
+komponen memiliki peringkat I–III; jika seri, regu berbagi peringkat dan peringkat berikutnya mengikuti sistem
+kompetisi (misalnya 1, 1, 3). Seluruh subtotal dinormalisasi terhadap maksimum rubrik event. Pengumuman diblokir apabila nilai
+belum lengkap/difinalkan atau skor untuk posisi pemenang Juara Utama sampai Siaga, Juara Pemula, Juara Pelajar,
+maupun Juara Umum seri. Jika
 skor Variasi dan Formasi sama-sama seri, semua regu teratas diumumkan sebagai pemenang bersama.
 
 Setelah provider/webhook menandai pembayaran sebagai `paid`, migration

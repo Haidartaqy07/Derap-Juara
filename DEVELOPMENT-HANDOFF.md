@@ -34,10 +34,13 @@ skema berbasis `participants`, bukan skema lama `peserta`.
   Caraka, Potensial, Perintis, dan Siaga masing-masing memiliki tiga peringkat berurutan dengan formula
   PBB 60%, Danton PBB 5%, VAFOR 30%, Danton VAFOR 5%; urutannya berlanjut sampai Siaga III di peringkat 30.
   Juara Umum: PBB 50%, VAFOR 30%, Danton PBB 10%, voting 10%; voting dinormalisasi terhadap jumlah
-  tertinggi dalam kategori. Dua nilai PBB dan Danton PBB dirata-rata. Juara Danton memakai Danton PBB.
-  Juara Variasi memakai Variasi+Formasi dan Formasi sebagai tie-break. Detail poin tersimpan bersama snapshot.
+  tertinggi dalam kategori. Juara Pemula I–III dan Juara Pelajar I–II memakai rumus Juara Utama, dihitung
+  dari regu dalam kategori U15/U19. PBB Terbaik, Danton Terbaik, dan Variasi Terbaik memiliki peringkat I–III;
+  PBB dan Danton memakai rata-rata dua juri, sedangkan Variasi memakai Variasi+Formasi dengan Formasi sebagai
+  tie-break. Seri komponen berbagi peringkat (peringkat berikutnya mengikuti sistem kompetisi, misalnya 1, 1, 3).
+  Detail poin tersimpan bersama snapshot.
   Semua nilai harus sudah final dan lengkap untuk seluruh peserta sebelum publikasi; skor seri pada posisi
-  penghargaan Juara Utama–Siaga memblokir
+  penghargaan Juara Utama–Siaga, Pemula, Pelajar, dan Juara Umum memblokir
   publikasi, sedangkan seri Juara Variasi yang tetap imbang setelah tie-break diumumkan sebagai juara bersama.
 - **UI:** tema navy-oranye dipakai di landing page, admin, dan juri. Area juri dirancang nyaman
   untuk tablet. Dialog juri menggunakan portal ke `document.body` agar tidak terpotong stacking context.
@@ -62,7 +65,8 @@ skema berbasis `participants`, bukan skema lama `peserta`.
   pembayaran dan webhook QRIS belum terintegrasi sehingga alur pembayaran publik masih nonaktif.
 - **Pengumuman juara:** admin meninjau dan menerbitkan snapshot hasil, yang tampil di `/pengumuman`.
   Kategori Juara Bergilir, Juara Utama/Harapan/Madya/Bina/Mula/Purwa/Caraka/Potensial/Perintis/Siaga
-  I–III, Juara Umum, PBB Terbaik, Juara Danton, dan Juara Variasi dihitung terpisah untuk U15/U19.
+  I–III, Juara Pemula I–III, Juara Pelajar I–II, Juara Umum, PBB Terbaik I–III, Danton Terbaik I–III,
+  dan Variasi Terbaik I–III dihitung terpisah untuk U15/U19.
 - **Tampilan hasil juara:** kategori penghargaan dipisahkan secara visual dan memiliki tautan navigasi
   cepat di pratinjau admin serta halaman publik.
 

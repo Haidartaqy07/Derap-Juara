@@ -66,6 +66,27 @@ const awardPlacements = [
 ] as const;
 const romanPlacements = ['I', 'II', 'III'] as const;
 const maximumAwardedRank = awardPlacements.length * romanPlacements.length;
+const podiumPlacements = ['I', 'II', 'III'] as const;
+
+function rankedWinners<T>(
+  values: T[],
+  compare: (first: T, second: T) => number,
+  score: (value: T) => number,
+  placementIndex: number
+) {
+  const ranked = [...values].sort(compare);
+  let currentRank = 0;
+  const winners: Array<{ participant: T; score: number }> = [];
+  ranked.forEach((participant, index) => {
+    if (index === 0 || compare(ranked[index - 1], participant) !== 0) {
+      currentRank = index + 1;
+    }
+    if (currentRank === placementIndex + 1) {
+      winners.push({ participant, score: score(participant) });
+    }
+  });
+  return winners;
+}
 
 function average(first: number, second: number) {
   return (first + second) / 2;
@@ -201,6 +222,8 @@ export function calculateChampionshipAwards(
     const umumRanked = sortedByScore(categoryParticipants, (participant) =>
       weightedTotal(participant, 'umum', maxVotes, maximums)
     );
+    const mainScore = (participant: ChampionshipScoreInput) =>
+      weightedTotal(participant, 'utama', maxVotes, maximums);
     assertNoRankingTies(
       utamaRanked,
       (participant) => weightedTotal(participant, 'utama', maxVotes, maximums),
@@ -215,25 +238,43 @@ export function calculateChampionshipAwards(
     );
 
     const bergilirWinner = utamaRanked[0];
+    const makeOverallRankedAwards = (
+      keyPrefix: string,
+      title: string,
+      placements: readonly string[],
+      rankedParticipants: ChampionshipScoreInput[],
+      startRank = 0
+    ) => placements.map((placement, index) => {
+      const participant = rankedParticipants[startRank + index];
+      return award(
+        `${keyPrefix}-${podiumPlacements[index].toLowerCase()}`,
+        title,
+        placement,
+        participant
+          ? [makeWinner(participant, mainScore(participant), mainAwardDetails(participant, maximums))]
+          : []
+      );
+    });
     const rankedAwards = awardPlacements.flatMap(({ key, title }, tierIndex) =>
-      romanPlacements.map((romanPlacement, placeIndex) => {
-        const rank = tierIndex * romanPlacements.length + placeIndex;
-        const participant = utamaRanked[rank];
-        return award(
-          `${key}-${romanPlacement.toLowerCase()}`,
-          title,
-          `Juara ${romanPlacement}`,
-          participant
-            ? [
-                makeWinner(
-                  participant,
-                  weightedTotal(participant, 'utama', maxVotes, maximums),
-                  mainAwardDetails(participant, maximums)
-                ),
-              ]
-            : []
-        );
-      })
+      makeOverallRankedAwards(
+        key,
+        title,
+        romanPlacements.map((placement) => `Juara ${placement}`),
+        utamaRanked,
+        tierIndex * romanPlacements.length
+      )
+    );
+    const pemulaAwards = makeOverallRankedAwards(
+      'pemula',
+      'Juara Pemula',
+      ['Juara I', 'Juara II', 'Juara III'],
+      utamaRanked
+    );
+    const pelajarAwards = makeOverallRankedAwards(
+      'pelajar',
+      'Juara Pelajar',
+      ['Juara I', 'Juara II'],
+      utamaRanked
     );
 
     const umum = umumRanked[0];
@@ -243,12 +284,67 @@ export function calculateChampionshipAwards(
       average(participant.dantonPbbJ1, participant.dantonPbbJ2);
     const variationScore = (participant: ChampionshipScoreInput) =>
       participant.variasi + participant.formasi;
-    const maxVariation = Math.max(...categoryParticipants.map(variationScore));
-    const variationLeaders = categoryParticipants.filter(
-      (participant) => variationScore(participant) === maxVariation
+    const bestComponentAwards = (
+      key: string,
+      title: string,
+      placementTitle: string,
+      score: (participant: ChampionshipScoreInput) => number,
+      details: (participant: ChampionshipScoreInput) => AwardScoreDetail[],
+      compare: (first: ChampionshipScoreInput, second: ChampionshipScoreInput) => number
+    ) => podiumPlacements.map((placement, index) =>
+      award(
+        `${key}-${placement.toLowerCase()}`,
+        title,
+        `${placementTitle} ${placement}`,
+        rankedWinners(categoryParticipants, compare, score, index).map(({ participant, score: value }) =>
+          makeWinner(participant, value, details(participant))
+        )
+      )
     );
-    const maxFormasi = Math.max(...variationLeaders.map(({ formasi }) => formasi));
-    const variationWinners = variationLeaders.filter(({ formasi }) => formasi === maxFormasi);
+    const pbbAwards = bestComponentAwards(
+      'pbb-terbaik',
+      'Juara PBB Terbaik',
+      'PBB Terbaik',
+      pbbBestScore,
+      (participant) => scoreDetails([
+        { label: 'PBB Juri 1', raw: participant.pbbJ1, maximum: maximums.pbb, weight: null },
+        { label: 'PBB Juri 2', raw: participant.pbbJ2, maximum: maximums.pbb, weight: null },
+      ]),
+      (first, second) => pbbBestScore(second) - pbbBestScore(first)
+    );
+    const dantonAwards = bestComponentAwards(
+      'danton',
+      'Juara Danton',
+      'Danton Terbaik',
+      dantonBestScore,
+      (participant) => scoreDetails([
+        {
+          label: 'Danton PBB Juri 1',
+          raw: participant.dantonPbbJ1,
+          maximum: maximums.dantonPbb,
+          weight: null,
+        },
+        {
+          label: 'Danton PBB Juri 2',
+          raw: participant.dantonPbbJ2,
+          maximum: maximums.dantonPbb,
+          weight: null,
+        },
+      ]),
+      (first, second) => dantonBestScore(second) - dantonBestScore(first)
+    );
+    const variationAwards = bestComponentAwards(
+      'variasi',
+      'Juara Variasi',
+      'Variasi Terbaik',
+      variationScore,
+      (participant) => scoreDetails([
+        { label: 'Variasi', raw: participant.variasi, maximum: maximums.variasi, weight: null },
+        { label: 'Formasi (tie-break)', raw: participant.formasi, maximum: maximums.formasi, weight: null },
+      ]),
+      (first, second) =>
+        variationScore(second) - variationScore(first) || second.formasi - first.formasi
+    );
 
     const awards = [
       award(
@@ -266,6 +362,8 @@ export function calculateChampionshipAwards(
           : []
       ),
       ...rankedAwards,
+      ...pemulaAwards,
+      ...pelajarAwards,
       award(
         'umum',
         'Juara Umum',
@@ -305,71 +403,9 @@ export function calculateChampionshipAwards(
             ]
           : []
       ),
-      award(
-        'pbb-terbaik',
-        'Juara PBB Terbaik',
-        'PBB Terbaik',
-        (() => {
-          const best = Math.max(...categoryParticipants.map(pbbBestScore));
-          return categoryParticipants
-            .filter((participant) => pbbBestScore(participant) === best)
-            .map((participant) =>
-              makeWinner(
-                participant,
-                best,
-                scoreDetails([
-                  { label: 'PBB Juri 1', raw: participant.pbbJ1, maximum: maximums.pbb, weight: null },
-                  { label: 'PBB Juri 2', raw: participant.pbbJ2, maximum: maximums.pbb, weight: null },
-                ])
-              )
-            );
-        })()
-      ),
-      award(
-        'danton',
-        'Juara Danton',
-        'Danton Terbaik',
-        (() => {
-          const best = Math.max(...categoryParticipants.map(dantonBestScore));
-          return categoryParticipants
-            .filter((participant) => dantonBestScore(participant) === best)
-            .map((participant) =>
-              makeWinner(
-                participant,
-                best,
-                scoreDetails([
-                  {
-                    label: 'Danton PBB Juri 1',
-                    raw: participant.dantonPbbJ1,
-                    maximum: maximums.dantonPbb,
-                    weight: null,
-                  },
-                  {
-                    label: 'Danton PBB Juri 2',
-                    raw: participant.dantonPbbJ2,
-                    maximum: maximums.dantonPbb,
-                    weight: null,
-                  },
-                ])
-              )
-            );
-        })()
-      ),
-      award(
-        'variasi',
-        'Juara Variasi',
-        'Variasi Terbaik',
-        variationWinners.map((participant) =>
-          makeWinner(
-            participant,
-            variationScore(participant),
-            scoreDetails([
-              { label: 'Variasi', raw: participant.variasi, maximum: maximums.variasi, weight: null },
-              { label: 'Formasi (tie-break)', raw: participant.formasi, maximum: maximums.formasi, weight: null },
-            ])
-          )
-        )
-      ),
+      ...pbbAwards,
+      ...dantonAwards,
+      ...variationAwards,
     ];
 
     return [{ category, awards }];
